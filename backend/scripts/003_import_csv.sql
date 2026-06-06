@@ -49,7 +49,7 @@ ON CONFLICT (sigla) DO UPDATE SET
     grupo_id = EXCLUDED.grupo_id;
 
 INSERT INTO selecoes (nome, sigla, escudo_url, grupo_id)
-SELECT 'Figurinhas Especiais', 'ESP', NULL, g.id
+SELECT 'Figurinhas Especiais', 'SPECIAL', NULL, g.id
 FROM grupos g
 WHERE g.nome = 'Especiais'
 ON CONFLICT (sigla) DO UPDATE SET
@@ -111,7 +111,7 @@ SELECT
     j.id AS jogador_id,
     s.id AS selecao_id
 FROM tmp_album_stickers_import t
-JOIN selecoes s ON s.sigla = COALESCE(NULLIF(TRIM(t.country_code), ''), 'ESP')
+JOIN selecoes s ON s.sigla = COALESCE(NULLIF(TRIM(t.country_code), ''), 'SPECIAL')
 LEFT JOIN jogadores j
     ON j.nome = TRIM(t.player)
    AND j.selecao_id = s.id
@@ -138,7 +138,7 @@ DECLARE
     total_panini_00 INTEGER;
 BEGIN
     SELECT COUNT(*) INTO total_figurinhas FROM figurinhas;
-    SELECT COUNT(*) INTO total_especiais FROM figurinhas f JOIN selecoes s ON s.id = f.selecao_id WHERE s.sigla = 'ESP';
+    SELECT COUNT(*) INTO total_especiais FROM figurinhas f JOIN selecoes s ON s.id = f.selecao_id WHERE s.sigla = 'SPECIAL';
     SELECT COUNT(*) INTO total_fwc FROM figurinhas WHERE categoria = 'fwc';
     SELECT COUNT(*) INTO total_panini_00 FROM figurinhas WHERE codigo = '00' AND categoria = 'logo_panini';
 
