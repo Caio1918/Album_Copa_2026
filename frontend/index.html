@@ -9,6 +9,16 @@
         display: none !important;
       }
 
+      .album-search {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: #fff;
+        padding: 14px 16px;
+        font-size: 15px;
+        box-shadow: 0 8px 24px rgba(16, 32, 24, 0.04);
+      }
+
       .group-card {
         min-height: 150px;
       }
@@ -31,9 +41,14 @@
     <script type="module" src="/src/main.tsx"></script>
     <script type="module">
       const API_URL = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
+      let albumData = { grupos: [], selecoes: [], jogadores: [] }
 
       const flags = {
         BRA: '🇧🇷', ARG: '🇦🇷', FRA: '🇫🇷', GER: '🇩🇪', ALE: '🇩🇪', ESP: '🇪🇸', POR: '🇵🇹', ENG: '🏴', ING: '🏴', ITA: '🇮🇹', NED: '🇳🇱', HOL: '🇳🇱', BEL: '🇧🇪', CRO: '🇭🇷', URU: '🇺🇾', MEX: '🇲🇽', USA: '🇺🇸', EUA: '🇺🇸', CAN: '🇨🇦', JPN: '🇯🇵', JAP: '🇯🇵', KOR: '🇰🇷', COR: '🇰🇷', AUS: '🇦🇺', MAR: '🇲🇦', SEN: '🇸🇳', GHA: '🇬🇭', NGA: '🇳🇬', EGY: '🇪🇬', TUN: '🇹🇳', ALG: '🇩🇿', CMR: '🇨🇲', SUI: '🇨🇭', SUIÇA: '🇨🇭', DEN: '🇩🇰', DIN: '🇩🇰', SWE: '🇸🇪', SUE: '🇸🇪', NOR: '🇳🇴', POL: '🇵🇱', POLONIA: '🇵🇱', AUT: '🇦🇹', TUR: '🇹🇷', TURQUIA: '🇹🇷', COL: '🇨🇴', CHI: '🇨🇱', ECU: '🇪🇨', PER: '🇵🇪', PAR: '🇵🇾', BOL: '🇧🇴', VEN: '🇻🇪', QAT: '🇶🇦', KSA: '🇸🇦', ARS: '🇸🇦', IRN: '🇮🇷', IRA: '🇮🇷'
+      }
+
+      function normalize(value) {
+        return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
       }
 
       function flagFor(selecao) {
@@ -57,23 +72,75 @@
         return '🏳️'
       }
 
+      async function loadAlbumData() {
+        if (albumData.grupos.length || albumData.selecoes.length || albumData.jogadores.length) return albumData
+
+        const [gruposResponse, selecoesResponse, jogadoresResponse] = await Promise.all([
+          fetch(`${API_URL}/grupos`),
+          fetch(`${API_URL}/selecoes`),
+          fetch(`${API_URL}/jogadores`),
+        ])
+
+        albumData = {
+          grupos: await gruposResponse.json(),
+          selecoes: await selecoesResponse.json(),
+          jogadores: await jogadoresResponse.json(),
+        }
+
+        return albumData
+      }
+
+      function getCardGrupo(card) {
+        const grupoNome = card.querySelector('span')?.textContent
+        return albumData.grupos.find((item) => item.nome === grupoNome)
+      }
+
+      function grupoMatchesSearch(grupo, query) {
+        if (!query) return true
+
+        const selecoesDoGrupo = albumData.selecoes.filter((selecao) => selecao.grupo_id === grupo?.id)
+        const selecaoIds = new Set(selecoesDoGrupo.map((selecao) => selecao.id))
+        const jogadoresDoGrupo = albumData.jogadores.filter((jogador) => selecaoIds.has(jogador.selecao_id))
+
+        return selecoesDoGrupo.some((selecao) => normalize(selecao.nome).includes(query) || normalize(selecao.sigla).includes(query)) || jogadoresDoGrupo.some((jogador) => normalize(jogador.nome).includes(query))
+      }
+
+      function applyAlbumSearch() {
+        const input = document.querySelector('.album-search')
+        const query = normalize(input?.value)
+        const cards = Array.from(document.querySelectorAll('.group-card'))
+
+        cards.forEach((card) => {
+          const grupo = getCardGrupo(card)
+          card.style.display = grupoMatchesSearch(grupo, query) ? '' : 'none'
+        })
+      }
+
+      function ensureAlbumSearch() {
+        const pageTitle = document.querySelector('.page-title h2')
+        if (!pageTitle || pageTitle.textContent !== 'Grupos da Copa') return
+        if (document.querySelector('.album-search')) return
+
+        const input = document.createElement('input')
+        input.className = 'album-search'
+        input.placeholder = 'Pesquisar seleção ou jogador...'
+        input.type = 'search'
+        input.addEventListener('input', applyAlbumSearch)
+        pageTitle.closest('.page-title')?.insertAdjacentElement('afterend', input)
+      }
+
       async function addTeamsToGroupCards() {
         const cards = Array.from(document.querySelectorAll('.group-card'))
-        if (!cards.length || cards.some((card) => card.querySelector('.group-teams'))) return
+        if (!cards.length) return
 
         try {
-          const [gruposResponse, selecoesResponse] = await Promise.all([
-            fetch(`${API_URL}/grupos`),
-            fetch(`${API_URL}/selecoes`),
-          ])
-
-          const grupos = await gruposResponse.json()
-          const selecoes = await selecoesResponse.json()
+          await loadAlbumData()
 
           cards.forEach((card) => {
-            const grupoNome = card.querySelector('span')?.textContent
-            const grupo = grupos.find((item) => item.nome === grupoNome)
-            const selecoesDoGrupo = selecoes.filter((selecao) => selecao.grupo_id === grupo?.id)
+            if (card.querySelector('.group-teams')) return
+
+            const grupo = getCardGrupo(card)
+            const selecoesDoGrupo = albumData.selecoes.filter((selecao) => selecao.grupo_id === grupo?.id)
             const wrapper = document.createElement('div')
 
             wrapper.className = 'group-teams'
@@ -83,6 +150,9 @@
 
             card.querySelector('strong')?.insertAdjacentElement('beforebegin', wrapper)
           })
+
+          ensureAlbumSearch()
+          applyAlbumSearch()
         } catch {
           return
         }
@@ -92,7 +162,7 @@
       const timer = window.setInterval(() => {
         attempts += 1
         addTeamsToGroupCards()
-        if (attempts >= 20 || document.querySelector('.group-teams')) {
+        if (attempts >= 30) {
           window.clearInterval(timer)
         }
       }, 300)
