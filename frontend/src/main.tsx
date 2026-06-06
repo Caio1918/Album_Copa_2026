@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 
-type View = 'dashboard' | 'album' | 'grupo' | 'selecao' | 'repetidas' | 'configuracoes'
+type View = 'dashboard' | 'album' | 'grupo' | 'selecao' | 'repetidas'
 
 type Grupo = { id: number; nome: string }
 type Selecao = { id: number; nome: string; sigla: string; grupo_id: number; escudo_url?: string | null }
@@ -97,13 +97,6 @@ function Dashboard() {
         <p>Acompanhe o progresso geral, figurinhas faltantes e últimas coladas.</p>
       </div>
 
-      <div className="stats-grid">
-        <StatCard label="Completo" value={`${data.porcentagem_completa}%`} detail="progresso total" />
-        <StatCard label="Coladas" value={data.total_coladas} detail="figurinhas no álbum" />
-        <StatCard label="Faltantes" value={data.total_faltantes} detail="para completar" />
-        <StatCard label="Repetidas" value={data.total_repetidas} detail="disponíveis para troca" />
-      </div>
-
       <div className="progress-panel">
         <div>
           <strong>Progresso do álbum</strong>
@@ -112,6 +105,13 @@ function Dashboard() {
         <div className="progress-bar">
           <div style={{ width: `${Math.min(data.porcentagem_completa, 100)}%` }} />
         </div>
+      </div>
+
+      <div className="stats-grid">
+        <StatCard label="Completo" value={`${data.porcentagem_completa}%`} detail="progresso total" />
+        <StatCard label="Coladas" value={data.total_coladas} detail="figurinhas no álbum" />
+        <StatCard label="Faltantes" value={data.total_faltantes} detail="para completar" />
+        <StatCard label="Repetidas" value={data.total_repetidas} detail="disponíveis para troca" />
       </div>
 
       <div className="two-columns">
@@ -202,8 +202,10 @@ function SelecaoPage({ selecao }: { selecao: Selecao | null }) {
   const [filter, setFilter] = useState('todas')
   const figurinhas = useApi<Figurinha[]>(() => selecao ? api(`/selecoes/${selecao.id}/figurinhas`) : Promise.resolve([]), [selecao?.id, refresh])
   const coladas = useApi<Colada[]>(() => api('/figurinhas-coladas'), [refresh])
+  const jogadores = useApi<Jogador[]>(() => api('/jogadores'), [])
 
   const coladasIds = useMemo(() => new Set((coladas.data || []).map((item) => item.figurinha_id)), [coladas.data])
+  const jogadoresPorId = useMemo(() => new Map((jogadores.data || []).map((jogador) => [jogador.id, jogador])), [jogadores.data])
 
   const lista = useMemo(() => {
     return (figurinhas.data || []).filter((figurinha) => {
@@ -242,19 +244,22 @@ function SelecaoPage({ selecao }: { selecao: Selecao | null }) {
         ))}
       </div>
 
-      {(figurinhas.loading || coladas.loading) && <Loading />}
+      {(figurinhas.loading || coladas.loading || jogadores.loading) && <Loading />}
       {figurinhas.error && <ErrorBox text={figurinhas.error} />}
       {coladas.error && <ErrorBox text={coladas.error} />}
+      {jogadores.error && <ErrorBox text={jogadores.error} />}
 
       <div className="stickers-grid">
         {lista.map((figurinha) => {
           const isColada = coladasIds.has(figurinha.id)
+          const jogador = figurinha.jogador_id ? jogadoresPorId.get(figurinha.jogador_id) : null
           return (
             <article key={figurinha.id} className={isColada ? 'sticker-card completed' : 'sticker-card'}>
               <div className="sticker-code">{figurinha.codigo}</div>
+              <strong className="player-name">{jogador?.nome || 'Figurinha da seleção'}</strong>
               <span className={`type-badge ${figurinha.tipo}`}>{figurinha.tipo}</span>
-              <strong>{isColada ? 'Colada' : 'Faltando'}</strong>
-              <button onClick={() => toggleColada(figurinha)}>{isColada ? 'Desmarcar' : 'Marcar como colada'}</button>
+              <small>{isColada ? 'Colada' : 'Faltando'}</small>
+              <button onClick={() => toggleColada(figurinha)}>{isColada ? 'Desmarcar' : 'Marcar'}</button>
             </article>
           )
         })}
@@ -340,67 +345,111 @@ function RepetidasPage() {
   )
 }
 
-function ConfiguracoesPage() {
-  const health = useApi<{ status: string; message: string }>(() => api('/health'), [])
-
-  return (
-    <section className="page-section">
-      <div className="page-title">
-        <span>Sistema</span>
-        <h2>Configurações</h2>
-        <p>Informações rápidas da aplicação e conexão com API.</p>
-      </div>
-      <div className="settings-grid">
-        <StatCard label="API" value={API_URL} detail="URL configurada" />
-        <StatCard label="Status" value={health.data?.status || 'verificando'} detail={health.error || health.data?.message || 'aguardando resposta'} />
-      </div>
-    </section>
-  )
-}
-
 function App() {
   const [view, setView] = useState<View>('dashboard')
   const [grupo, setGrupo] = useState<Grupo | null>(null)
   const [selecao, setSelecao] = useState<Selecao | null>(null)
 
-  const menu: { id: View; label: string }[] = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'album', label: 'Álbum' },
-    { id: 'repetidas', label: 'Repetidas' },
-    { id: 'configuracoes', label: 'Configurações' },
+  const menu: { id: View; label: string; icon: string }[] = [
+    { id: 'dashboard', label: 'Início', icon: '🏠' },
+    { id: 'album', label: 'Álbum', icon: '📘' },
+    { id: 'repetidas', label: 'Repetidas', icon: '🔁' },
   ]
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">26</div>
-          <div><strong>Álbum Copa</strong><span>2026</span></div>
-        </div>
-        <nav className="nav-list">
-          {menu.map((item) => (
-            <button key={item.id} className={view === item.id ? 'nav-item active' : 'nav-item'} onClick={() => setView(item.id)}>{item.label}</button>
-          ))}
-        </nav>
-      </aside>
       <main className="content">
         <header className="topbar">
+          <div className="brand compact-brand">
+            <div className="brand-mark">26</div>
+            <div><strong>Álbum Copa</strong><span>2026</span></div>
+          </div>
           <div><span className="eyebrow">Controle pessoal</span><h1>Álbum da Copa do Mundo 2026</h1></div>
-          <div className="topbar-badge">Flat • Minimalista</div>
         </header>
         {view === 'dashboard' && <Dashboard />}
         {view === 'album' && <AlbumPage onOpenGrupo={(item) => { setGrupo(item); setView('grupo') }} />}
         {view === 'grupo' && <GrupoPage grupo={grupo} onOpenSelecao={(item) => { setSelecao(item); setView('selecao') }} />}
         {view === 'selecao' && <SelecaoPage selecao={selecao} />}
         {view === 'repetidas' && <RepetidasPage />}
-        {view === 'configuracoes' && <ConfiguracoesPage />}
       </main>
+
+      <nav className="bottom-bar">
+        {menu.map((item) => (
+          <button key={item.id} className={view === item.id ? 'bottom-item active' : 'bottom-item'} onClick={() => setView(item.id)}>
+            <span>{item.icon}</span>
+            <strong>{item.label}</strong>
+          </button>
+        ))}
+      </nav>
     </div>
   )
 }
 
 const css = `
-:root{--green:#009b3a;--yellow:#ffdf00;--blue:#002776;--bg:#f6f8f7;--card:#ffffff;--text:#102018;--muted:#6b7280;--line:#e5e7eb;--danger:#dc2626}*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--text)}button,input{font:inherit}.app-shell{min-height:100vh;display:flex}.sidebar{width:260px;background:var(--card);border-right:1px solid var(--line);padding:24px;position:sticky;top:0;height:100vh}.brand{display:flex;gap:12px;align-items:center;margin-bottom:32px}.brand-mark{width:48px;height:48px;border-radius:16px;background:linear-gradient(135deg,var(--green),var(--blue));color:#fff;display:grid;place-items:center;font-weight:900}.brand strong,.brand span{display:block}.brand span{color:var(--muted);font-size:13px}.nav-list{display:grid;gap:8px}.nav-item{border:0;background:transparent;color:var(--muted);text-align:left;padding:12px 14px;border-radius:14px;cursor:pointer}.nav-item.active,.nav-item:hover{background:#eef8f1;color:var(--green);font-weight:700}.content{flex:1;padding:28px;max-width:1280px;margin:0 auto}.topbar{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:28px}.topbar h1{margin:4px 0 0;font-size:28px}.eyebrow,.page-title span{color:var(--green);font-size:13px;text-transform:uppercase;font-weight:800;letter-spacing:.08em}.topbar-badge{background:var(--blue);color:#fff;border-radius:999px;padding:10px 14px;font-weight:700}.page-section{display:grid;gap:22px}.page-title h2{font-size:32px;margin:6px 0}.page-title p{margin:0;color:var(--muted)}.stats-grid,.card-grid,.settings-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}.stat-card,.flat-card,.list-panel,.progress-panel,.group-card,.team-card,.sticker-card,.search-panel,.empty-state,.error-box{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:20px;box-shadow:0 8px 24px rgba(16,32,24,.04)}.stat-card span,.flat-card span{display:block;color:var(--muted);font-size:14px}.stat-card strong,.flat-card strong{display:block;font-size:30px;margin-top:8px}.stat-card small{color:var(--muted)}.progress-panel{display:grid;gap:14px}.progress-panel>div:first-child{display:flex;justify-content:space-between;color:var(--muted)}.progress-panel strong{color:var(--text)}.progress-bar{height:14px;background:#edf2ef;border-radius:999px;overflow:hidden}.progress-bar div{height:100%;background:linear-gradient(90deg,var(--green),var(--yellow));border-radius:999px}.two-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.accent-yellow{border-left:6px solid var(--yellow)}.accent-blue{border-left:6px solid var(--blue)}.simple-list{display:grid;gap:10px}.list-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:16px;padding:14px;background:#fff;color:var(--text);text-align:left}.list-row small{color:var(--muted)}.group-card,.team-card{cursor:pointer;text-align:left;min-height:130px}.group-card span{color:var(--green);font-weight:900;font-size:26px}.group-card strong,.team-card span{display:block;margin-top:18px;color:var(--muted)}.team-card{text-align:center;display:grid;place-items:center}.team-badge{width:58px;height:58px;border-radius:20px;background:var(--blue);color:#fff;display:grid;place-items:center;font-weight:900}.filter-row{display:flex;flex-wrap:wrap;gap:10px}.filter{border:1px solid var(--line);background:#fff;border-radius:999px;padding:10px 16px;cursor:pointer;text-transform:capitalize}.filter.active{background:var(--green);color:#fff;border-color:var(--green);font-weight:800}.stickers-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}.sticker-card{display:grid;gap:12px}.sticker-card.completed{background:#f0faf3;border-color:#b6e3c3}.sticker-code{height:120px;border-radius:18px;background:linear-gradient(135deg,#eef8f1,#fdf9d7);display:grid;place-items:center;font-size:24px;font-weight:900;color:var(--blue)}.type-badge{width:max-content;border-radius:999px;padding:6px 10px;background:#eef2ff;color:var(--blue);font-size:12px;font-weight:900}.type-badge.brilhante{background:#fff7bf;color:#8a6d00}.sticker-card button,.search-panel button,.controls-row button{border:0;border-radius:12px;padding:10px 12px;background:var(--green);color:#fff;font-weight:800;cursor:pointer}.search-panel{display:grid;grid-template-columns:1fr 100px;gap:12px}.search-panel input{border:1px solid var(--line);border-radius:14px;padding:14px}.suggestions button{cursor:pointer}.controls-row>div{display:flex;align-items:center;gap:8px}.controls-row button{padding:8px 12px}.controls-row .danger{background:var(--danger)}.empty-state{color:var(--muted);text-align:center}.error-box{color:var(--danger);background:#fff1f2;border-color:#fecdd3}@media(max-width:960px){.app-shell{display:block}.sidebar{width:auto;height:auto;position:static}.nav-list{grid-template-columns:repeat(4,1fr)}.stats-grid,.card-grid,.settings-grid,.stickers-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.topbar{display:grid}.two-columns{grid-template-columns:1fr}}@media(max-width:620px){.content,.sidebar{padding:18px}.nav-list,.stats-grid,.card-grid,.settings-grid,.stickers-grid,.search-panel{grid-template-columns:1fr}.topbar h1{font-size:22px}.page-title h2{font-size:26px}.list-row{align-items:flex-start;flex-direction:column}.controls-row>div{flex-wrap:wrap}}
+:root{--green:#009b3a;--yellow:#ffdf00;--blue:#002776;--bg:#f6f8f7;--card:#ffffff;--text:#102018;--muted:#6b7280;--line:#e5e7eb;--danger:#dc2626}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--text)}
+button,input{font:inherit}
+button{cursor:pointer}
+.app-shell{min-height:100vh}
+.content{width:min(1280px,100%);margin:0 auto;padding:24px 24px 104px}
+.topbar{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center;margin-bottom:24px}
+.topbar h1{margin:4px 0 0;font-size:clamp(22px,4vw,32px)}
+.brand{display:flex;gap:12px;align-items:center}
+.brand-mark{width:48px;height:48px;border-radius:16px;background:linear-gradient(135deg,var(--green),var(--blue));color:#fff;display:grid;place-items:center;font-weight:900;box-shadow:0 10px 24px rgba(0,39,118,.16)}
+.brand strong,.brand span{display:block}
+.brand span{color:var(--muted);font-size:13px}
+.bottom-bar{position:fixed;left:50%;bottom:16px;z-index:20;transform:translateX(-50%);width:min(520px,calc(100% - 28px));display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px;border:1px solid var(--line);border-radius:26px;background:rgba(255,255,255,.94);box-shadow:0 18px 50px rgba(16,32,24,.18);backdrop-filter:blur(12px)}
+.bottom-item{border:0;background:transparent;color:var(--muted);display:grid;place-items:center;gap:4px;border-radius:18px;padding:10px 8px;min-height:62px}
+.bottom-item span{font-size:20px;line-height:1}
+.bottom-item strong{font-size:12px}
+.bottom-item.active,.bottom-item:hover{background:#eef8f1;color:var(--green)}
+.eyebrow,.page-title span{color:var(--green);font-size:13px;text-transform:uppercase;font-weight:800;letter-spacing:.08em}
+.page-section{display:grid;gap:20px}
+.page-title h2{font-size:clamp(26px,5vw,36px);margin:6px 0}
+.page-title p{margin:0;color:var(--muted)}
+.stats-grid,.card-grid,.settings-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.stat-card,.flat-card,.list-panel,.progress-panel,.group-card,.team-card,.sticker-card,.search-panel,.empty-state,.error-box{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:20px;box-shadow:0 8px 24px rgba(16,32,24,.04)}
+.stat-card span,.flat-card span{display:block;color:var(--muted);font-size:14px}
+.stat-card strong,.flat-card strong{display:block;font-size:30px;margin-top:8px}
+.stat-card small{color:var(--muted)}
+.progress-panel{display:grid;gap:14px}
+.progress-panel>div:first-child{display:flex;justify-content:space-between;gap:12px;color:var(--muted)}
+.progress-panel strong{color:var(--text)}
+.progress-bar{height:14px;background:#edf2ef;border-radius:999px;overflow:hidden}
+.progress-bar div{height:100%;background:linear-gradient(90deg,var(--green),var(--yellow));border-radius:999px}
+.two-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.accent-yellow{border-left:6px solid var(--yellow)}
+.accent-blue{border-left:6px solid var(--blue)}
+.simple-list{display:grid;gap:10px}
+.list-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:16px;padding:14px;background:#fff;color:var(--text);text-align:left}
+.list-row small{color:var(--muted)}
+.group-card,.team-card{cursor:pointer;text-align:left;min-height:130px}
+.group-card span{color:var(--green);font-weight:900;font-size:26px}
+.group-card strong,.team-card span{display:block;margin-top:18px;color:var(--muted)}
+.team-card{text-align:center;display:grid;place-items:center}
+.team-badge{width:58px;height:58px;border-radius:20px;background:var(--blue);color:#fff;display:grid;place-items:center;font-weight:900}
+.filter-row{display:flex;flex-wrap:wrap;gap:10px;position:sticky;top:0;z-index:5;background:var(--bg);padding:4px 0 8px}
+.filter{border:1px solid var(--line);background:#fff;border-radius:999px;padding:10px 16px;text-transform:capitalize}
+.filter.active{background:var(--green);color:#fff;border-color:var(--green);font-weight:800}
+.stickers-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;align-items:stretch}
+.sticker-card{display:grid;gap:10px;align-content:start}
+.sticker-card.completed{background:#f0faf3;border-color:#b6e3c3}
+.sticker-code{height:112px;border-radius:18px;background:linear-gradient(135deg,#eef8f1,#fdf9d7);display:grid;place-items:center;font-size:24px;font-weight:900;color:var(--blue)}
+.player-name{font-size:15px;line-height:1.25;min-height:38px}
+.sticker-card small{color:var(--muted);font-weight:700}
+.type-badge{width:max-content;border-radius:999px;padding:6px 10px;background:#eef2ff;color:var(--blue);font-size:12px;font-weight:900}
+.type-badge.brilhante{background:#fff7bf;color:#8a6d00}
+.sticker-card button,.search-panel button,.controls-row button{border:0;border-radius:12px;padding:10px 12px;background:var(--green);color:#fff;font-weight:800}
+.search-panel{display:grid;grid-template-columns:1fr 100px;gap:12px}
+.search-panel input{border:1px solid var(--line);border-radius:14px;padding:14px;min-width:0}
+.controls-row>div{display:flex;align-items:center;gap:8px}
+.controls-row button{padding:8px 12px}
+.controls-row .danger{background:var(--danger)}
+.empty-state{color:var(--muted);text-align:center}
+.error-box{color:var(--danger);background:#fff1f2;border-color:#fecdd3}
+@media(max-width:960px){.content{padding-inline:18px}.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.stickers-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.topbar{grid-template-columns:1fr}.compact-brand{order:-1}.progress-panel>div:first-child{display:grid}}
+@media(max-width:620px){.content{padding:18px 14px 104px}.stats-grid,.card-grid,.two-columns{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.stickers-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.stat-card,.flat-card,.list-panel,.progress-panel,.group-card,.team-card,.sticker-card,.search-panel,.empty-state,.error-box{border-radius:18px;padding:14px}.group-card,.team-card{min-height:112px}.sticker-code{height:92px;font-size:20px}.player-name{font-size:13px;min-height:34px}.sticker-card button{font-size:12px;padding:9px}.search-panel{grid-template-columns:1fr 84px}.list-row{align-items:flex-start;flex-direction:column}.controls-row>div{flex-wrap:wrap}.bottom-bar{bottom:10px}.bottom-item{min-height:58px;padding:8px 6px}.bottom-item strong{font-size:11px}}
 `
 
 const style = document.createElement('style')
