@@ -20,7 +20,22 @@ def obter_resumo(db: Session = Depends(get_db)):
 
     faltantes = db.query(Figurinha).outerjoin(FigurinhaColada).filter(FigurinhaColada.id.is_(None))
     normais_faltantes = faltantes.filter(Figurinha.tipo == "normal").count()
-    brilhantes_faltantes = db.query(Figurinha).outerjoin(FigurinhaColada).filter(FigurinhaColada.id.is_(None), Figurinha.tipo == "brilhante").count()
+    brilhantes_faltantes = (
+        db.query(Figurinha)
+        .outerjoin(FigurinhaColada)
+        .filter(
+            FigurinhaColada.id.is_(None),
+            Figurinha.tipo == "brilhante",
+            Figurinha.categoria != "especial",
+        )
+        .count()
+    )
+    especiais_faltantes = (
+        db.query(Figurinha)
+        .outerjoin(FigurinhaColada)
+        .filter(FigurinhaColada.id.is_(None), Figurinha.categoria == "especial")
+        .count()
+    )
     total_repetidas = sum(item.quantidade for item in db.query(FigurinhaRepetida).all())
 
     return DashboardResumo(
@@ -30,6 +45,7 @@ def obter_resumo(db: Session = Depends(get_db)):
         porcentagem_completa=porcentagem,
         normais_faltantes=normais_faltantes,
         brilhantes_faltantes=brilhantes_faltantes,
+        especiais_faltantes=especiais_faltantes,
         total_repetidas=total_repetidas,
     )
 
