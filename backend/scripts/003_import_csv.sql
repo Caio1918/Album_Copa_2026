@@ -31,6 +31,10 @@ WHERE group_name IS NOT NULL
   AND group_name <> ''
 ON CONFLICT (nome) DO NOTHING;
 
+INSERT INTO grupos (nome)
+VALUES ('Especiais')
+ON CONFLICT (nome) DO NOTHING;
+
 INSERT INTO selecoes (nome, sigla, escudo_url, grupo_id)
 SELECT DISTINCT
     t.team_name,
@@ -43,6 +47,14 @@ WHERE t.team_name IS NOT NULL
   AND t.team_name <> ''
   AND t.country_code IS NOT NULL
   AND t.country_code <> ''
+ON CONFLICT (sigla) DO UPDATE SET
+    nome = EXCLUDED.nome,
+    grupo_id = EXCLUDED.grupo_id;
+
+INSERT INTO selecoes (nome, sigla, escudo_url, grupo_id)
+SELECT 'Figurinhas Especiais', 'ESP', NULL, g.id
+FROM grupos g
+WHERE g.nome = 'Especiais'
 ON CONFLICT (sigla) DO UPDATE SET
     nome = EXCLUDED.nome,
     grupo_id = EXCLUDED.grupo_id;
@@ -106,6 +118,51 @@ LEFT JOIN jogadores j
    AND j.selecao_id = s.id
 WHERE t.code IS NOT NULL
   AND t.code <> ''
+ON CONFLICT (codigo) DO UPDATE SET
+    tipo = EXCLUDED.tipo,
+    imagem_url = EXCLUDED.imagem_url,
+    numero_global = EXCLUDED.numero_global,
+    numero_na_selecao = EXCLUDED.numero_na_selecao,
+    nome = EXCLUDED.nome,
+    categoria = EXCLUDED.categoria,
+    secao = EXCLUDED.secao,
+    observacoes = EXCLUDED.observacoes,
+    fonte_url = EXCLUDED.fonte_url,
+    status_cadastro = EXCLUDED.status_cadastro,
+    jogador_id = EXCLUDED.jogador_id,
+    selecao_id = EXCLUDED.selecao_id;
+
+INSERT INTO figurinhas (
+    codigo,
+    tipo,
+    imagem_url,
+    numero_global,
+    numero_na_selecao,
+    nome,
+    categoria,
+    secao,
+    observacoes,
+    fonte_url,
+    status_cadastro,
+    jogador_id,
+    selecao_id
+)
+SELECT
+    'ESP-' || LPAD(n::TEXT, 2, '0') AS codigo,
+    'brilhante' AS tipo,
+    NULL AS imagem_url,
+    960 + n AS numero_global,
+    n AS numero_na_selecao,
+    'Figurinha especial ' || n AS nome,
+    'especial' AS categoria,
+    'Especiais' AS secao,
+    'Figurinha especial adicionada ao álbum' AS observacoes,
+    NULL AS fonte_url,
+    'OK' AS status_cadastro,
+    NULL AS jogador_id,
+    s.id AS selecao_id
+FROM generate_series(1, 20) AS n
+JOIN selecoes s ON s.sigla = 'ESP'
 ON CONFLICT (codigo) DO UPDATE SET
     tipo = EXCLUDED.tipo,
     imagem_url = EXCLUDED.imagem_url,
