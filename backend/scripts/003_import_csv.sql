@@ -1,3 +1,5 @@
+\set ON_ERROR_STOP on
+
 BEGIN;
 
 DROP TABLE IF EXISTS tmp_album_stickers_import;
@@ -20,7 +22,7 @@ CREATE TEMP TABLE tmp_album_stickers_import (
     status_cadastro VARCHAR(40)
 );
 
-\copy tmp_album_stickers_import (number_global, team_slot, code, type, category, section, group_name, team_name, country_code, name, player, position, notes, source_url, status_cadastro) FROM :'csv_path' WITH (FORMAT csv, HEADER true, DELIMITER ',', ENCODING 'UTF8')
+\copy tmp_album_stickers_import (number_global, team_slot, code, type, category, section, group_name, team_name, country_code, name, player, position, notes, source_url, status_cadastro) FROM :csv_path WITH (FORMAT csv, HEADER true, DELIMITER ',', ENCODING 'UTF8')
 
 INSERT INTO grupos (nome)
 SELECT DISTINCT group_name
