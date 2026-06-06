@@ -8,4 +8,5 @@ class DashboardResumo(BaseModel):
     porcentagem_completa: float
     normais_faltantes: int
     brilhantes_faltantes: int
+    especiais_faltantes: int
     total_repetidas: int
