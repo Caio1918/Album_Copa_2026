@@ -8,10 +8,94 @@
       .topbar {
         display: none !important;
       }
+
+      .group-card {
+        min-height: 150px;
+      }
+
+      .group-teams {
+        display: grid;
+        gap: 5px;
+        margin-top: 14px;
+      }
+
+      .group-teams small {
+        color: var(--text);
+        font-weight: 700;
+        line-height: 1.25;
+      }
     </style>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script type="module">
+      const API_URL = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
+
+      const flags = {
+        BRA: '🇧🇷', ARG: '🇦🇷', FRA: '🇫🇷', GER: '🇩🇪', ALE: '🇩🇪', ESP: '🇪🇸', POR: '🇵🇹', ENG: '🏴', ING: '🏴', ITA: '🇮🇹', NED: '🇳🇱', HOL: '🇳🇱', BEL: '🇧🇪', CRO: '🇭🇷', URU: '🇺🇾', MEX: '🇲🇽', USA: '🇺🇸', EUA: '🇺🇸', CAN: '🇨🇦', JPN: '🇯🇵', JAP: '🇯🇵', KOR: '🇰🇷', COR: '🇰🇷', AUS: '🇦🇺', MAR: '🇲🇦', SEN: '🇸🇳', GHA: '🇬🇭', NGA: '🇳🇬', EGY: '🇪🇬', TUN: '🇹🇳', ALG: '🇩🇿', CMR: '🇨🇲', SUI: '🇨🇭', SUIÇA: '🇨🇭', DEN: '🇩🇰', DIN: '🇩🇰', SWE: '🇸🇪', SUE: '🇸🇪', NOR: '🇳🇴', POL: '🇵🇱', POLONIA: '🇵🇱', AUT: '🇦🇹', TUR: '🇹🇷', TURQUIA: '🇹🇷', COL: '🇨🇴', CHI: '🇨🇱', ECU: '🇪🇨', PER: '🇵🇪', PAR: '🇵🇾', BOL: '🇧🇴', VEN: '🇻🇪', QAT: '🇶🇦', KSA: '🇸🇦', ARS: '🇸🇦', IRN: '🇮🇷', IRA: '🇮🇷'
+      }
+
+      function flagFor(selecao) {
+        const sigla = String(selecao.sigla || '').toUpperCase()
+        const nome = String(selecao.nome || '').toUpperCase()
+        if (flags[sigla]) return flags[sigla]
+        if (nome.includes('BRASIL')) return '🇧🇷'
+        if (nome.includes('ARGENTINA')) return '🇦🇷'
+        if (nome.includes('FRANÇA')) return '🇫🇷'
+        if (nome.includes('ALEMANHA')) return '🇩🇪'
+        if (nome.includes('ESPANHA')) return '🇪🇸'
+        if (nome.includes('PORTUGAL')) return '🇵🇹'
+        if (nome.includes('INGLATERRA')) return '🏴'
+        if (nome.includes('ITÁLIA') || nome.includes('ITALIA')) return '🇮🇹'
+        if (nome.includes('HOLANDA') || nome.includes('PAÍSES BAIXOS') || nome.includes('PAISES BAIXOS')) return '🇳🇱'
+        if (nome.includes('URUGUAI')) return '🇺🇾'
+        if (nome.includes('MÉXICO') || nome.includes('MEXICO')) return '🇲🇽'
+        if (nome.includes('ESTADOS UNIDOS')) return '🇺🇸'
+        if (nome.includes('CANADÁ') || nome.includes('CANADA')) return '🇨🇦'
+        if (nome.includes('JAPÃO') || nome.includes('JAPAO')) return '🇯🇵'
+        return '🏳️'
+      }
+
+      async function addTeamsToGroupCards() {
+        const cards = Array.from(document.querySelectorAll('.group-card'))
+        if (!cards.length || cards.some((card) => card.querySelector('.group-teams'))) return
+
+        try {
+          const [gruposResponse, selecoesResponse] = await Promise.all([
+            fetch(`${API_URL}/grupos`),
+            fetch(`${API_URL}/selecoes`),
+          ])
+
+          const grupos = await gruposResponse.json()
+          const selecoes = await selecoesResponse.json()
+
+          cards.forEach((card) => {
+            const grupoNome = card.querySelector('span')?.textContent
+            const grupo = grupos.find((item) => item.nome === grupoNome)
+            const selecoesDoGrupo = selecoes.filter((selecao) => selecao.grupo_id === grupo?.id)
+            const wrapper = document.createElement('div')
+
+            wrapper.className = 'group-teams'
+            wrapper.innerHTML = selecoesDoGrupo.length
+              ? selecoesDoGrupo.map((selecao) => `<small>${flagFor(selecao)} ${selecao.nome}</small>`).join('')
+              : '<small>🏳️ Seleções não cadastradas</small>'
+
+            card.querySelector('strong')?.insertAdjacentElement('beforebegin', wrapper)
+          })
+        } catch {
+          return
+        }
+      }
+
+      let attempts = 0
+      const timer = window.setInterval(() => {
+        attempts += 1
+        addTeamsToGroupCards()
+        if (attempts >= 20 || document.querySelector('.group-teams')) {
+          window.clearInterval(timer)
+        }
+      }, 300)
+    </script>
   </body>
 </html>
