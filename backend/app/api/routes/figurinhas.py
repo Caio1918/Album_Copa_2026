@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps.database import get_db
 from app.models.figurinha import Figurinha
+from app.models.grupo import Grupo
 from app.models.jogador import Jogador
 from app.models.selecao import Selecao
 from app.schemas.figurinha_schema import FigurinhaCreate, FigurinhaResponse, FigurinhaUpdate
@@ -18,7 +19,27 @@ def listar_figurinhas(db: Session = Depends(get_db)):
 
 @router.get("/search", response_model=list[FigurinhaResponse])
 def pesquisar_figurinhas(termo: str = Query(min_length=1), db: Session = Depends(get_db)):
-    return db.query(Figurinha).filter(or_(Figurinha.codigo.ilike(f"%{termo}%"), Figurinha.tipo.ilike(f"%{termo}%"))).order_by(Figurinha.codigo).all()
+    termo_busca = f"%{termo}%"
+    return (
+        db.query(Figurinha)
+        .join(Selecao, Selecao.id == Figurinha.selecao_id)
+        .join(Grupo, Grupo.id == Selecao.grupo_id)
+        .outerjoin(Jogador, Jogador.id == Figurinha.jogador_id)
+        .filter(
+            or_(
+                Figurinha.codigo.ilike(termo_busca),
+                Figurinha.tipo.ilike(termo_busca),
+                Figurinha.nome.ilike(termo_busca),
+                Figurinha.categoria.ilike(termo_busca),
+                Jogador.nome.ilike(termo_busca),
+                Selecao.nome.ilike(termo_busca),
+                Selecao.sigla.ilike(termo_busca),
+                Grupo.nome.ilike(termo_busca),
+            )
+        )
+        .order_by(Figurinha.codigo)
+        .all()
+    )
 
 
 @router.get("/selecao/{selecao_id}", response_model=list[FigurinhaResponse])
