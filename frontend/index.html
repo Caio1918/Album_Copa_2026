@@ -9,6 +9,10 @@
         display: none !important;
       }
 
+      .album-search-wrapper {
+        position: relative;
+      }
+
       .album-search {
         width: 100%;
         border: 1px solid var(--line);
@@ -17,6 +21,53 @@
         padding: 14px 16px;
         font-size: 15px;
         box-shadow: 0 8px 24px rgba(16, 32, 24, 0.04);
+      }
+
+      .album-search-results {
+        position: absolute;
+        top: calc(100% + 8px);
+        left: 0;
+        right: 0;
+        z-index: 30;
+        display: none;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: #fff;
+        box-shadow: 0 18px 40px rgba(16, 32, 24, 0.16);
+      }
+
+      .album-search-results.active {
+        display: grid;
+      }
+
+      .album-suggestion {
+        display: grid;
+        gap: 2px;
+        width: 100%;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        background: #fff;
+        padding: 13px 15px;
+        color: var(--text);
+        text-align: left;
+      }
+
+      .album-suggestion:last-child {
+        border-bottom: 0;
+      }
+
+      .album-suggestion:hover {
+        background: #eef8f1;
+      }
+
+      .album-suggestion strong {
+        font-size: 14px;
+      }
+
+      .album-suggestion small {
+        color: var(--muted);
+        font-size: 12px;
       }
 
       .group-card {
@@ -95,6 +146,14 @@
         return albumData.grupos.find((item) => item.nome === grupoNome)
       }
 
+      function getSelecaoById(selecaoId) {
+        return albumData.selecoes.find((selecao) => selecao.id === selecaoId)
+      }
+
+      function getGrupoBySelecao(selecao) {
+        return albumData.grupos.find((grupo) => grupo.id === selecao?.grupo_id)
+      }
+
       function grupoMatchesSearch(grupo, query) {
         if (!query) return true
 
@@ -103,6 +162,24 @@
         const jogadoresDoGrupo = albumData.jogadores.filter((jogador) => selecaoIds.has(jogador.selecao_id))
 
         return selecoesDoGrupo.some((selecao) => normalize(selecao.nome).includes(query) || normalize(selecao.sigla).includes(query)) || jogadoresDoGrupo.some((jogador) => normalize(jogador.nome).includes(query))
+      }
+
+      function getSuggestions(query) {
+        if (!query) return []
+
+        const selecoes = albumData.selecoes
+          .filter((selecao) => normalize(selecao.nome).includes(query) || normalize(selecao.sigla).includes(query))
+          .map((selecao) => ({ type: 'selecao', title: `${flagFor(selecao)} ${selecao.nome}`, subtitle: 'Seleção', selecao }))
+
+        const jogadores = albumData.jogadores
+          .filter((jogador) => normalize(jogador.nome).includes(query))
+          .map((jogador) => {
+            const selecao = getSelecaoById(jogador.selecao_id)
+            return { type: 'jogador', title: jogador.nome, subtitle: `${flagFor(selecao)} ${selecao?.nome || 'Seleção'}`, selecao }
+          })
+          .filter((item) => item.selecao)
+
+        return [...selecoes, ...jogadores].slice(0, 8)
       }
 
       function applyAlbumSearch() {
@@ -114,19 +191,80 @@
           const grupo = getCardGrupo(card)
           card.style.display = grupoMatchesSearch(grupo, query) ? '' : 'none'
         })
+
+        renderSuggestions(query)
+      }
+
+      function renderSuggestions(query) {
+        const results = document.querySelector('.album-search-results')
+        if (!results) return
+
+        const suggestions = getSuggestions(query)
+        results.innerHTML = ''
+        results.classList.toggle('active', suggestions.length > 0)
+
+        suggestions.forEach((suggestion) => {
+          const button = document.createElement('button')
+          button.type = 'button'
+          button.className = 'album-suggestion'
+          button.innerHTML = `<strong>${suggestion.title}</strong><small>${suggestion.subtitle}</small>`
+          button.addEventListener('click', () => openSelecao(suggestion.selecao))
+          results.appendChild(button)
+        })
+      }
+
+      function openSelecao(selecao) {
+        const grupo = getGrupoBySelecao(selecao)
+        if (!grupo) return
+
+        const input = document.querySelector('.album-search')
+        const results = document.querySelector('.album-search-results')
+        if (input) input.value = ''
+        if (results) results.classList.remove('active')
+
+        const groupCard = Array.from(document.querySelectorAll('.group-card')).find((card) => card.querySelector('span')?.textContent === grupo.nome)
+        groupCard?.click()
+
+        let attempts = 0
+        const timer = window.setInterval(() => {
+          attempts += 1
+          const teamCard = Array.from(document.querySelectorAll('.team-card')).find((card) => card.textContent?.includes(selecao.nome))
+
+          if (teamCard) {
+            teamCard.click()
+            window.clearInterval(timer)
+          }
+
+          if (attempts >= 20) {
+            window.clearInterval(timer)
+          }
+        }, 120)
       }
 
       function ensureAlbumSearch() {
         const pageTitle = document.querySelector('.page-title h2')
         if (!pageTitle || pageTitle.textContent !== 'Grupos da Copa') return
-        if (document.querySelector('.album-search')) return
+        if (document.querySelector('.album-search-wrapper')) return
 
+        const wrapper = document.createElement('div')
         const input = document.createElement('input')
+        const results = document.createElement('div')
+
+        wrapper.className = 'album-search-wrapper'
         input.className = 'album-search'
         input.placeholder = 'Pesquisar seleção ou jogador...'
         input.type = 'search'
+        results.className = 'album-search-results'
+
         input.addEventListener('input', applyAlbumSearch)
-        pageTitle.closest('.page-title')?.insertAdjacentElement('afterend', input)
+        input.addEventListener('focus', applyAlbumSearch)
+        document.addEventListener('click', (event) => {
+          if (!wrapper.contains(event.target)) results.classList.remove('active')
+        })
+
+        wrapper.appendChild(input)
+        wrapper.appendChild(results)
+        pageTitle.closest('.page-title')?.insertAdjacentElement('afterend', wrapper)
       }
 
       async function addTeamsToGroupCards() {
