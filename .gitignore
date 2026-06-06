@@ -1,0 +1,76 @@
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Editores e IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Variáveis de ambiente
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# FastAPI / Uvicorn
+*.log
+logs/
+
+# Banco de dados local
+*.db
+*.sqlite
+*.sqlite3
+
+# Node / React / Vite
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+build/
+.vite/
+
+# TypeScript
+*.tsbuildinfo
+
+# Arquivos de produção local
+frontend/dist/
+frontend/build/
+
+# Cache
+.cache/
+.parcel-cache/
+
+# Uploads e arquivos temporários
+tmp/
+temp/
+uploads/
+
+# Testes e cobertura frontend
+coverage/
+
+# Docker, caso seja usado futuramente
+.docker/
+docker-compose.override.yml
