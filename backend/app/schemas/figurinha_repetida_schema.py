@@ -1,5 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.figurinha_schema import FigurinhaResponse
+
 
 class FigurinhaRepetidaCreate(BaseModel):
     figurinha_id: int
@@ -7,12 +9,13 @@ class FigurinhaRepetidaCreate(BaseModel):
 
 
 class FigurinhaRepetidaUpdate(BaseModel):
-    quantidade: int = Field(ge=0)
+    quantidade: int = Field(ge=1)
 
 
 class FigurinhaRepetidaResponse(BaseModel):
     id: int
     figurinha_id: int
     quantidade: int
+    figurinha: FigurinhaResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)
