@@ -74,6 +74,16 @@ function useApi<T>(loader: () => Promise<T>, deps: React.DependencyList) {
   return { data, loading, error }
 }
 
+function normalizeText(value: string | number | null | undefined) {
+  return String(value || '').toLowerCase().trim()
+}
+
+function matchesSearch(values: Array<string | number | null | undefined>, search: string) {
+  const term = normalizeText(search)
+  if (!term) return true
+  return values.some((value) => normalizeText(value).includes(term))
+}
+
 function getStickerName(fig: Figurinha, jogadoresPorId?: Map<number, Jogador>) {
   if (fig.nome) return fig.nome
   if (fig.jogador_id && jogadoresPorId?.has(fig.jogador_id)) return jogadoresPorId.get(fig.jogador_id)?.nome || 'Figurinha'
@@ -204,7 +214,7 @@ function AlbumPage({ onOpenGrupo }: { onOpenGrupo: (grupo: Grupo) => void }) {
   )
 }
 
-function GrupoPage({ grupo, onOpenSelecao }: { grupo: Grupo | null; onOpenSelecao: (selecao: Selecao) => void }) {
+function GrupoPage({ grupo, onOpenSelecao, onBack }: { grupo: Grupo | null; onOpenSelecao: (selecao: Selecao) => void; onBack: () => void }) {
   const selecoes = useApi<Selecao[]>(() => grupo ? api(`/grupos/${grupo.id}/selecoes`) : Promise.resolve([]), [grupo?.id])
 
   if (!grupo) return <EmptyState text="Selecione um grupo na tela Álbum." />
@@ -216,6 +226,7 @@ function GrupoPage({ grupo, onOpenSelecao }: { grupo: Grupo | null; onOpenSeleca
         <h2>Seleções do grupo</h2>
         <p>Abra uma seleção para controlar suas figurinhas.</p>
       </div>
+      <button className="back-button" onClick={onBack}>Voltar para grupos</button>
       {selecoes.loading && <Loading />}
       {selecoes.error && <ErrorBox text={selecoes.error} />}
       <div className="card-grid team-grid">
@@ -232,7 +243,7 @@ function GrupoPage({ grupo, onOpenSelecao }: { grupo: Grupo | null; onOpenSeleca
   )
 }
 
-function SelecaoPage({ selecao }: { selecao: Selecao | null }) {
+function SelecaoPage({ selecao, onBack }: { selecao: Selecao | null; onBack: () => void }) {
   const [refresh, setRefresh] = useState(0)
   const [filter, setFilter] = useState('todas')
   const figurinhas = useApi<Figurinha[]>(() => selecao ? api(`/selecoes/${selecao.id}/figurinhas`) : Promise.resolve([]), [selecao?.id, refresh])
@@ -272,6 +283,7 @@ function SelecaoPage({ selecao }: { selecao: Selecao | null }) {
         <h2>{selecao.nome}</h2>
         <p>Controle as figurinhas coladas e faltantes dessa seleção.</p>
       </div>
+      <button className="back-button" onClick={onBack}>Voltar para seleções</button>
 
       <div className="filter-row">
         {['todas', 'normais', 'brilhantes', 'coladas', 'faltantes'].map((item) => (
@@ -315,6 +327,7 @@ function RepetidasPage() {
   const [refresh, setRefresh] = useState(0)
   const [grupoSelecionado, setGrupoSelecionado] = useState<Grupo | null>(null)
   const [selecaoSelecionada, setSelecaoSelecionada] = useState<Selecao | null>(null)
+  const [busca, setBusca] = useState('')
   const grupos = useApi<Grupo[]>(() => api('/grupos'), [])
   const selecoes = useApi<Selecao[]>(() => grupoSelecionado ? api(`/grupos/${grupoSelecionado.id}/selecoes`) : Promise.resolve([]), [grupoSelecionado?.id])
   const figurinhas = useApi<Figurinha[]>(() => selecaoSelecionada ? api(`/selecoes/${selecaoSelecionada.id}/figurinhas`) : Promise.resolve([]), [selecaoSelecionada?.id, refresh])
@@ -325,19 +338,43 @@ function RepetidasPage() {
   const jogadoresPorId = useMemo(() => new Map((jogadores.data || []).map((jogador) => [jogador.id, jogador])), [jogadores.data])
   const coladasIds = useMemo(() => new Set((coladas.data || []).map((item) => item.figurinha_id)), [coladas.data])
   const repetidasPorFigurinhaId = useMemo(() => new Map((repetidas.data || []).map((item) => [item.figurinha_id, item])), [repetidas.data])
+  const gruposFiltrados = useMemo(() => (grupos.data || []).filter((grupo) => matchesSearch([grupo.nome], busca)), [grupos.data, busca])
+  const selecoesFiltradas = useMemo(() => (selecoes.data || []).filter((selecao) => matchesSearch([selecao.nome, selecao.sigla], busca)), [selecoes.data, busca])
+  const figurinhasFiltradas = useMemo(() => (figurinhas.data || []).filter((figurinha) => {
+    const jogador = figurinha.jogador_id ? jogadoresPorId.get(figurinha.jogador_id) : null
+    return matchesSearch([
+      figurinha.codigo,
+      figurinha.tipo,
+      figurinha.nome,
+      figurinha.categoria,
+      figurinha.numero_global,
+      figurinha.numero_na_selecao,
+      jogador?.nome,
+      jogador?.posicao,
+      jogador?.numero,
+    ], busca)
+  }), [figurinhas.data, jogadoresPorId, busca])
 
   function abrirGrupo(grupo: Grupo) {
     setGrupoSelecionado(grupo)
     setSelecaoSelecionada(null)
+    setBusca('')
+  }
+
+  function abrirSelecao(selecao: Selecao) {
+    setSelecaoSelecionada(selecao)
+    setBusca('')
   }
 
   function voltarParaGrupos() {
     setGrupoSelecionado(null)
     setSelecaoSelecionada(null)
+    setBusca('')
   }
 
   function voltarParaSelecoes() {
     setSelecaoSelecionada(null)
+    setBusca('')
   }
 
   async function atualizarRepetida(figurinha: Figurinha, novaQuantidade: number) {
@@ -360,17 +397,18 @@ function RepetidasPage() {
           <h2>Grupos das repetidas</h2>
           <p>Escolha um grupo para cadastrar e controlar suas figurinhas repetidas.</p>
         </div>
+        <input className="album-search" value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Pesquisar grupo..." />
         {grupos.loading && <Loading />}
         {grupos.error && <ErrorBox text={grupos.error} />}
         <div className="card-grid album-grid">
-          {grupos.data?.map((grupo) => (
+          {gruposFiltrados.map((grupo) => (
             <button key={grupo.id} className="group-card" onClick={() => abrirGrupo(grupo)}>
               <span>{grupo.nome}</span>
               <strong>Ver seleções</strong>
             </button>
           ))}
         </div>
-        {!grupos.loading && !grupos.data?.length && <EmptyState text="Nenhum grupo cadastrado." />}
+        {!grupos.loading && !gruposFiltrados.length && <EmptyState text="Nenhum grupo encontrado." />}
       </section>
     )
   }
@@ -384,18 +422,19 @@ function RepetidasPage() {
           <p>Escolha uma seleção para adicionar ou remover repetidas.</p>
         </div>
         <button className="back-button" onClick={voltarParaGrupos}>Voltar para grupos</button>
+        <input className="album-search" value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Pesquisar seleção..." />
         {selecoes.loading && <Loading />}
         {selecoes.error && <ErrorBox text={selecoes.error} />}
         <div className="card-grid team-grid">
-          {selecoes.data?.map((selecao) => (
-            <button key={selecao.id} className="team-card" onClick={() => setSelecaoSelecionada(selecao)}>
+          {selecoesFiltradas.map((selecao) => (
+            <button key={selecao.id} className="team-card" onClick={() => abrirSelecao(selecao)}>
               <div className="team-badge">{selecao.sigla}</div>
               <strong>{selecao.nome}</strong>
               <span>Ver figurinhas</span>
             </button>
           ))}
         </div>
-        {!selecoes.loading && !selecoes.data?.length && <EmptyState text="Nenhuma seleção cadastrada nesse grupo." />}
+        {!selecoes.loading && !selecoesFiltradas.length && <EmptyState text="Nenhuma seleção encontrada nesse grupo." />}
       </section>
     )
   }
@@ -408,6 +447,7 @@ function RepetidasPage() {
         <p>Use os botões para adicionar, aumentar, diminuir ou remover repetidas.</p>
       </div>
       <button className="back-button" onClick={voltarParaSelecoes}>Voltar para seleções</button>
+      <input className="album-search" value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Pesquisar jogador, código, tipo ou categoria..." />
 
       {(figurinhas.loading || repetidas.loading || coladas.loading || jogadores.loading) && <Loading />}
       {figurinhas.error && <ErrorBox text={figurinhas.error} />}
@@ -416,7 +456,7 @@ function RepetidasPage() {
       {jogadores.error && <ErrorBox text={jogadores.error} />}
 
       <div className="stickers-grid">
-        {figurinhas.data?.map((figurinha) => {
+        {figurinhasFiltradas.map((figurinha) => {
           const repetida = repetidasPorFigurinhaId.get(figurinha.id)
           const quantidade = repetida?.quantidade || 0
           const isColada = coladasIds.has(figurinha.id)
@@ -444,7 +484,7 @@ function RepetidasPage() {
           )
         })}
       </div>
-      {!figurinhas.loading && !figurinhas.data?.length && <EmptyState text="Nenhuma figurinha encontrada para essa seleção." />}
+      {!figurinhas.loading && !figurinhasFiltradas.length && <EmptyState text="Nenhuma figurinha encontrada para essa busca." />}
     </section>
   )
 }
@@ -463,6 +503,17 @@ function App() {
   function openSelecao(selecao: Selecao) {
     setSelecaoSelecionada(selecao)
     setView('selecao')
+  }
+
+  function voltarAlbumParaGrupos() {
+    setGrupoSelecionado(null)
+    setSelecaoSelecionada(null)
+    setView('album')
+  }
+
+  function voltarAlbumParaSelecoes() {
+    setSelecaoSelecionada(null)
+    setView('grupo')
   }
 
   return (
@@ -490,8 +541,8 @@ function App() {
       <section className="content">
         {view === 'dashboard' && <Dashboard />}
         {view === 'album' && <AlbumPage onOpenGrupo={openGrupo} />}
-        {view === 'grupo' && <GrupoPage grupo={grupoSelecionado} onOpenSelecao={openSelecao} />}
-        {view === 'selecao' && <SelecaoPage selecao={selecaoSelecionada} />}
+        {view === 'grupo' && <GrupoPage grupo={grupoSelecionado} onOpenSelecao={openSelecao} onBack={voltarAlbumParaGrupos} />}
+        {view === 'selecao' && <SelecaoPage selecao={selecaoSelecionada} onBack={voltarAlbumParaSelecoes} />}
         {view === 'repetidas' && <RepetidasPage />}
       </section>
     </main>
