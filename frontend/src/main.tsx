@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
+import './style.css'
 
 type View = 'dashboard' | 'album' | 'grupo' | 'selecao' | 'repetidas'
 
@@ -189,7 +190,7 @@ function AlbumPage({ onOpenGrupo }: { onOpenGrupo: (grupo: Grupo) => void }) {
       </div>
       {grupos.loading && <Loading />}
       {grupos.error && <ErrorBox text={grupos.error} />}
-      <div className="card-grid">
+      <div className="card-grid album-grid">
         {grupos.data?.map((grupo) => (
           <button key={grupo.id} className="group-card" onClick={() => onOpenGrupo(grupo)}>
             <span>{grupo.nome}</span>
@@ -216,7 +217,7 @@ function GrupoPage({ grupo, onOpenSelecao }: { grupo: Grupo | null; onOpenSeleca
       </div>
       {selecoes.loading && <Loading />}
       {selecoes.error && <ErrorBox text={selecoes.error} />}
-      <div className="card-grid">
+      <div className="card-grid team-grid">
         {selecoes.data?.map((selecao) => (
           <button key={selecao.id} className="team-card" onClick={() => onOpenSelecao(selecao)}>
             <div className="team-badge">{selecao.sigla}</div>
