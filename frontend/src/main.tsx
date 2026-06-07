@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
+import { Album, BarChart3, Repeat2 } from 'lucide-react'
 import './style.css'
 
 type View = 'dashboard' | 'album' | 'grupo' | 'selecao' | 'repetidas'
@@ -146,7 +147,7 @@ function Dashboard() {
       </div>
 
       <div className="two-columns">
-        <div className="flat-card accent-yellow">
+        <div className="flat-card accent-green">
           <span>Normais faltantes</span>
           <strong>{data.normais_faltantes}</strong>
         </div>
@@ -400,13 +401,22 @@ function App() {
     <main className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <span>2026</span>
+          <span>FIFA 2026</span>
           <strong>Álbum da Copa</strong>
         </div>
-        <nav>
-          <button className={view === 'dashboard' ? 'active' : ''} onClick={() => setView('dashboard')}>Dashboard</button>
-          <button className={['album', 'grupo', 'selecao'].includes(view) ? 'active' : ''} onClick={() => setView('album')}>Álbum</button>
-          <button className={view === 'repetidas' ? 'active' : ''} onClick={() => setView('repetidas')}>Repetidas</button>
+        <nav className="app-nav" aria-label="Navegação principal">
+          <button className={view === 'dashboard' ? 'active nav-dashboard' : 'nav-dashboard'} onClick={() => setView('dashboard')} aria-label="Abrir dashboard">
+            <BarChart3 aria-hidden="true" />
+            <span>Dashboard</span>
+          </button>
+          <button className={['album', 'grupo', 'selecao'].includes(view) ? 'active nav-album' : 'nav-album'} onClick={() => setView('album')} aria-label="Abrir álbum">
+            <Album aria-hidden="true" />
+            <span>Álbum</span>
+          </button>
+          <button className={view === 'repetidas' ? 'active nav-repetidas' : 'nav-repetidas'} onClick={() => setView('repetidas')} aria-label="Abrir repetidas">
+            <Repeat2 aria-hidden="true" />
+            <span>Repetidas</span>
+          </button>
         </nav>
       </aside>
       <section className="content">
