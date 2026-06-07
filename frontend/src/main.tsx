@@ -25,7 +25,7 @@ type Figurinha = {
   status_cadastro?: string | null
 }
 type Colada = { id: number; figurinha_id: number; data_colagem: string }
-type Repetida = { id: number; figurinha_id: number; quantidade: number }
+type Repetida = { id: number; figurinha_id: number; quantidade: number; figurinha?: Figurinha | null }
 type DashboardResumo = {
   total_figurinhas: number
   total_coladas: number
@@ -84,6 +84,11 @@ function getStickerName(fig: Figurinha, jogadoresPorId?: Map<number, Jogador>) {
 
 function getTypeLabel(tipo: string) {
   return tipo === 'brilhante' ? 'Brilhante' : 'Normal'
+}
+
+function getSelectionName(fig: Figurinha, selecoesPorId: Map<number, Selecao>) {
+  const selecao = selecoesPorId.get(fig.selecao_id)
+  return selecao ? `${selecao.nome} (${selecao.sigla})` : 'Seleção não identificada'
 }
 
 function StatCard({ label, value, detail }: { label: string; value: string | number; detail?: string }) {
@@ -309,12 +314,18 @@ function RepetidasPage() {
   const [busca, setBusca] = useState('')
   const [quantidade, setQuantidade] = useState(1)
   const repetidas = useApi<Repetida[]>(() => api('/repetidas'), [refresh])
-  const sugestoes = useApi<Figurinha[]>(() => busca.length > 1 ? api(`/figurinhas/search?termo=${encodeURIComponent(busca)}`) : Promise.resolve([]), [busca, refresh])
+  const sugestoes = useApi<Figurinha[]>(() => busca.trim().length > 1 ? api(`/figurinhas/search?termo=${encodeURIComponent(busca.trim())}`) : Promise.resolve([]), [busca, refresh])
   const figurinhas = useApi<Figurinha[]>(() => api('/figurinhas'), [refresh])
   const jogadores = useApi<Jogador[]>(() => api('/jogadores'), [])
+  const selecoes = useApi<Selecao[]>(() => api('/selecoes'), [])
 
   const figurinhasPorId = useMemo(() => new Map((figurinhas.data || []).map((item) => [item.id, item])), [figurinhas.data])
   const jogadoresPorId = useMemo(() => new Map((jogadores.data || []).map((jogador) => [jogador.id, jogador])), [jogadores.data])
+  const selecoesPorId = useMemo(() => new Map((selecoes.data || []).map((selecao) => [selecao.id, selecao])), [selecoes.data])
+
+  function updateQuantidade(value: string) {
+    setQuantidade(Math.max(1, Number(value) || 1))
+  }
 
   async function adicionarRepetida(figurinha: Figurinha) {
     await api('/repetidas', { method: 'POST', body: JSON.stringify({ figurinha_id: figurinha.id, quantidade }) })
@@ -332,6 +343,10 @@ function RepetidasPage() {
     setRefresh((value) => value + 1)
   }
 
+  function getFigurinhaRepetida(item: Repetida) {
+    return item.figurinha || figurinhasPorId.get(item.figurinha_id)
+  }
+
   return (
     <section className="page-section">
       <div className="page-title">
@@ -342,30 +357,41 @@ function RepetidasPage() {
 
       <div className="search-panel">
         <input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Buscar figurinha..." />
-        <input type="number" min="1" value={quantidade} onChange={(event) => setQuantidade(Number(event.target.value))} />
+        <input type="number" min="1" value={quantidade} onChange={(event) => updateQuantidade(event.target.value)} aria-label="Quantidade" />
       </div>
 
+      {sugestoes.loading && busca.trim().length > 1 && <Loading />}
+      {sugestoes.error && <ErrorBox text={sugestoes.error} />}
       {sugestoes.data?.length ? (
         <div className="simple-list suggestions">
           {sugestoes.data.slice(0, 10).map((figurinha) => (
-            <button key={figurinha.id} className="list-row" onClick={() => adicionarRepetida(figurinha)}>
-              <span>{figurinha.codigo} - {getStickerName(figurinha, jogadoresPorId)}</span>
-              <small>{getTypeLabel(figurinha.tipo)} · {figurinha.categoria || 'figurinha'} · adicionar repetida</small>
+            <button key={figurinha.id} className="list-row suggestion-row" onClick={() => adicionarRepetida(figurinha)}>
+              <span>
+                <strong>{figurinha.codigo} - {getStickerName(figurinha, jogadoresPorId)}</strong>
+                <small>{getSelectionName(figurinha, selecoesPorId)} · {getTypeLabel(figurinha.tipo)} · {figurinha.categoria || 'figurinha'}</small>
+              </span>
+              <small>Adicionar como repetida</small>
             </button>
           ))}
         </div>
-      ) : busca.length > 1 && !sugestoes.loading && <EmptyState text="Nenhuma figurinha encontrada." />}
+      ) : busca.trim().length > 1 && !sugestoes.loading && <EmptyState text="Nenhuma figurinha encontrada." />}
 
       <div className="list-panel">
         <h3>Minhas repetidas</h3>
-        {(repetidas.loading || figurinhas.loading || jogadores.loading) && <Loading />}
+        {(repetidas.loading || figurinhas.loading || jogadores.loading || selecoes.loading) && <Loading />}
         {repetidas.error && <ErrorBox text={repetidas.error} />}
+        {figurinhas.error && <ErrorBox text={figurinhas.error} />}
+        {jogadores.error && <ErrorBox text={jogadores.error} />}
+        {selecoes.error && <ErrorBox text={selecoes.error} />}
         <div className="simple-list">
           {repetidas.data?.map((item) => {
-            const figurinha = figurinhasPorId.get(item.figurinha_id)
+            const figurinha = getFigurinhaRepetida(item)
             return (
               <div key={item.id} className="list-row">
-                <span>{figurinha ? `${figurinha.codigo} - ${getStickerName(figurinha, jogadoresPorId)}` : `Figurinha #${item.figurinha_id}`}</span>
+                <span>
+                  <strong>{figurinha ? `${figurinha.codigo} - ${getStickerName(figurinha, jogadoresPorId)}` : `Figurinha #${item.figurinha_id}`}</strong>
+                  {figurinha && <small>{getSelectionName(figurinha, selecoesPorId)} · {getTypeLabel(figurinha.tipo)} · {figurinha.categoria || 'figurinha'}</small>}
+                </span>
                 <div className="quantity-actions">
                   <button onClick={() => atualizar(item, item.quantidade - 1)}>-</button>
                   <strong>{item.quantidade}</strong>
