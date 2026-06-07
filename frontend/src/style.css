@@ -537,7 +537,13 @@ button.list-row:hover {
   border-color: var(--blue);
 }
 
+.list-row span {
+  display: grid;
+  gap: 0.2rem;
+}
+
 .list-row span,
+.list-row strong,
 .list-row small {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -545,6 +551,20 @@ button.list-row:hover {
 
 .list-row small {
   color: var(--muted);
+}
+
+.suggestion-row {
+  align-items: flex-start;
+}
+
+.suggestion-row > small {
+  flex-shrink: 0;
+  padding: 0.28rem 0.65rem;
+  color: var(--white);
+  font-size: 0.78rem;
+  font-weight: 850;
+  background: var(--red);
+  border-radius: 999px;
 }
 
 .quantity-actions {
@@ -861,6 +881,11 @@ button.list-row:hover {
   .list-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .suggestion-row > small {
+    width: 100%;
+    text-align: center;
   }
 
   .quantity-actions {
