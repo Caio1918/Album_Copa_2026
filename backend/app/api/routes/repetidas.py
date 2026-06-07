@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps.database import get_db
 from app.models.figurinha import Figurinha
@@ -13,16 +13,20 @@ from app.schemas.figurinha_repetida_schema import FigurinhaRepetidaCreate, Figur
 router = APIRouter()
 
 
+def repetidas_query(db: Session):
+    return db.query(FigurinhaRepetida).options(joinedload(FigurinhaRepetida.figurinha))
+
+
 @router.get("", response_model=list[FigurinhaRepetidaResponse])
 def listar_repetidas(db: Session = Depends(get_db)):
-    return db.query(FigurinhaRepetida).order_by(FigurinhaRepetida.id).all()
+    return repetidas_query(db).order_by(FigurinhaRepetida.id).all()
 
 
 @router.get("/search", response_model=list[FigurinhaRepetidaResponse])
 def buscar_repetidas(termo: str = Query(min_length=1), db: Session = Depends(get_db)):
     termo_busca = f"%{termo}%"
     return (
-        db.query(FigurinhaRepetida)
+        repetidas_query(db)
         .join(Figurinha, Figurinha.id == FigurinhaRepetida.figurinha_id)
         .join(Selecao, Selecao.id == Figurinha.selecao_id)
         .join(Grupo, Grupo.id == Selecao.grupo_id)
@@ -46,7 +50,7 @@ def buscar_repetidas(termo: str = Query(min_length=1), db: Session = Depends(get
 
 @router.get("/{repetida_id}", response_model=FigurinhaRepetidaResponse)
 def buscar_repetida(repetida_id: int, db: Session = Depends(get_db)):
-    repetida = db.get(FigurinhaRepetida, repetida_id)
+    repetida = repetidas_query(db).filter(FigurinhaRepetida.id == repetida_id).first()
     if not repetida:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Figurinha repetida não encontrada")
     return repetida
@@ -63,8 +67,7 @@ def adicionar_repetida(payload: FigurinhaRepetidaCreate, db: Session = Depends(g
         repetida = FigurinhaRepetida(**payload.model_dump())
         db.add(repetida)
     db.commit()
-    db.refresh(repetida)
-    return repetida
+    return repetidas_query(db).filter(FigurinhaRepetida.id == repetida.id).first()
 
 
 @router.put("/{repetida_id}", response_model=FigurinhaRepetidaResponse)
@@ -74,8 +77,7 @@ def atualizar_repetida(repetida_id: int, payload: FigurinhaRepetidaUpdate, db: S
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Figurinha repetida não encontrada")
     repetida.quantidade = payload.quantidade
     db.commit()
-    db.refresh(repetida)
-    return repetida
+    return repetidas_query(db).filter(FigurinhaRepetida.id == repetida.id).first()
 
 
 @router.delete("/{repetida_id}", status_code=status.HTTP_204_NO_CONTENT)
