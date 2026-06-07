@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
-import { Album, BarChart3, Repeat2 } from 'lucide-react'
+import { Album, BarChart3, CheckCircle2, Repeat2 } from 'lucide-react'
 import './style.css'
 
 type View = 'dashboard' | 'album' | 'grupo' | 'selecao' | 'repetidas'
@@ -84,11 +84,6 @@ function getStickerName(fig: Figurinha, jogadoresPorId?: Map<number, Jogador>) {
 
 function getTypeLabel(tipo: string) {
   return tipo === 'brilhante' ? 'Brilhante' : 'Normal'
-}
-
-function getSelectionName(fig: Figurinha, selecoesPorId: Map<number, Selecao>) {
-  const selecao = selecoesPorId.get(fig.selecao_id)
-  return selecao ? `${selecao.nome} (${selecao.sigla})` : 'Seleção não identificada'
 }
 
 function StatCard({ label, value, detail }: { label: string; value: string | number; detail?: string }) {
@@ -294,12 +289,19 @@ function SelecaoPage({ selecao }: { selecao: Selecao | null }) {
           const isColada = coladasIds.has(figurinha.id)
           return (
             <article key={figurinha.id} className={isColada ? 'sticker-card completed' : 'sticker-card'}>
+              {isColada && (
+                <div className="completed-icon" aria-label="Figurinha colada">
+                  <CheckCircle2 aria-hidden="true" />
+                </div>
+              )}
               <div className="sticker-code">{figurinha.codigo}</div>
               <strong className="player-name">{getStickerName(figurinha, jogadoresPorId)}</strong>
               <span className={`type-badge ${figurinha.tipo}`}>{getTypeLabel(figurinha.tipo)}</span>
               <small>{figurinha.categoria || 'figurinha'} {figurinha.numero_global ? `#${figurinha.numero_global}` : ''}</small>
               <small>{isColada ? 'Colada' : 'Faltando'}</small>
-              <button onClick={() => toggleColada(figurinha)}>{isColada ? 'Desmarcar' : 'Marcar'}</button>
+              <button className={isColada ? 'card-action unmark' : 'card-action mark'} onClick={() => toggleColada(figurinha)}>
+                {isColada ? 'Desmarcar' : 'Marcar'}
+              </button>
             </article>
           )
         })}
@@ -311,98 +313,138 @@ function SelecaoPage({ selecao }: { selecao: Selecao | null }) {
 
 function RepetidasPage() {
   const [refresh, setRefresh] = useState(0)
-  const [busca, setBusca] = useState('')
-  const [quantidade, setQuantidade] = useState(1)
+  const [grupoSelecionado, setGrupoSelecionado] = useState<Grupo | null>(null)
+  const [selecaoSelecionada, setSelecaoSelecionada] = useState<Selecao | null>(null)
+  const grupos = useApi<Grupo[]>(() => api('/grupos'), [])
+  const selecoes = useApi<Selecao[]>(() => grupoSelecionado ? api(`/grupos/${grupoSelecionado.id}/selecoes`) : Promise.resolve([]), [grupoSelecionado?.id])
+  const figurinhas = useApi<Figurinha[]>(() => selecaoSelecionada ? api(`/selecoes/${selecaoSelecionada.id}/figurinhas`) : Promise.resolve([]), [selecaoSelecionada?.id, refresh])
   const repetidas = useApi<Repetida[]>(() => api('/repetidas'), [refresh])
-  const sugestoes = useApi<Figurinha[]>(() => busca.trim().length > 1 ? api(`/figurinhas/search?termo=${encodeURIComponent(busca.trim())}`) : Promise.resolve([]), [busca, refresh])
-  const figurinhas = useApi<Figurinha[]>(() => api('/figurinhas'), [refresh])
+  const coladas = useApi<Colada[]>(() => api('/figurinhas-coladas'), [refresh])
   const jogadores = useApi<Jogador[]>(() => api('/jogadores'), [])
-  const selecoes = useApi<Selecao[]>(() => api('/selecoes'), [])
 
-  const figurinhasPorId = useMemo(() => new Map((figurinhas.data || []).map((item) => [item.id, item])), [figurinhas.data])
   const jogadoresPorId = useMemo(() => new Map((jogadores.data || []).map((jogador) => [jogador.id, jogador])), [jogadores.data])
-  const selecoesPorId = useMemo(() => new Map((selecoes.data || []).map((selecao) => [selecao.id, selecao])), [selecoes.data])
+  const coladasIds = useMemo(() => new Set((coladas.data || []).map((item) => item.figurinha_id)), [coladas.data])
+  const repetidasPorFigurinhaId = useMemo(() => new Map((repetidas.data || []).map((item) => [item.figurinha_id, item])), [repetidas.data])
 
-  function updateQuantidade(value: string) {
-    setQuantidade(Math.max(1, Number(value) || 1))
+  function abrirGrupo(grupo: Grupo) {
+    setGrupoSelecionado(grupo)
+    setSelecaoSelecionada(null)
   }
 
-  async function adicionarRepetida(figurinha: Figurinha) {
-    await api('/repetidas', { method: 'POST', body: JSON.stringify({ figurinha_id: figurinha.id, quantidade }) })
-    setBusca('')
-    setQuantidade(1)
-    setRefresh((value) => value + 1)
+  function voltarParaGrupos() {
+    setGrupoSelecionado(null)
+    setSelecaoSelecionada(null)
   }
 
-  async function atualizar(item: Repetida, novaQuantidade: number) {
-    if (novaQuantidade <= 0) {
-      await api(`/repetidas/${item.id}`, { method: 'DELETE' })
+  function voltarParaSelecoes() {
+    setSelecaoSelecionada(null)
+  }
+
+  async function atualizarRepetida(figurinha: Figurinha, novaQuantidade: number) {
+    const repetida = repetidasPorFigurinhaId.get(figurinha.id)
+    if (repetida && novaQuantidade <= 0) {
+      await api(`/repetidas/${repetida.id}`, { method: 'DELETE' })
+    } else if (repetida) {
+      await api(`/repetidas/${repetida.id}`, { method: 'PUT', body: JSON.stringify({ quantidade: novaQuantidade }) })
     } else {
-      await api(`/repetidas/${item.id}`, { method: 'PUT', body: JSON.stringify({ quantidade: novaQuantidade }) })
+      await api('/repetidas', { method: 'POST', body: JSON.stringify({ figurinha_id: figurinha.id, quantidade: 1 }) })
     }
     setRefresh((value) => value + 1)
   }
 
-  function getFigurinhaRepetida(item: Repetida) {
-    return item.figurinha || figurinhasPorId.get(item.figurinha_id)
+  if (!grupoSelecionado) {
+    return (
+      <section className="page-section">
+        <div className="page-title">
+          <span>Trocas</span>
+          <h2>Grupos das repetidas</h2>
+          <p>Escolha um grupo para cadastrar e controlar suas figurinhas repetidas.</p>
+        </div>
+        {grupos.loading && <Loading />}
+        {grupos.error && <ErrorBox text={grupos.error} />}
+        <div className="card-grid album-grid">
+          {grupos.data?.map((grupo) => (
+            <button key={grupo.id} className="group-card" onClick={() => abrirGrupo(grupo)}>
+              <span>{grupo.nome}</span>
+              <strong>Ver seleções</strong>
+            </button>
+          ))}
+        </div>
+        {!grupos.loading && !grupos.data?.length && <EmptyState text="Nenhum grupo cadastrado." />}
+      </section>
+    )
+  }
+
+  if (!selecaoSelecionada) {
+    return (
+      <section className="page-section">
+        <div className="page-title">
+          <span>{grupoSelecionado.nome}</span>
+          <h2>Seleções das repetidas</h2>
+          <p>Escolha uma seleção para adicionar ou remover repetidas.</p>
+        </div>
+        <button className="back-button" onClick={voltarParaGrupos}>Voltar para grupos</button>
+        {selecoes.loading && <Loading />}
+        {selecoes.error && <ErrorBox text={selecoes.error} />}
+        <div className="card-grid team-grid">
+          {selecoes.data?.map((selecao) => (
+            <button key={selecao.id} className="team-card" onClick={() => setSelecaoSelecionada(selecao)}>
+              <div className="team-badge">{selecao.sigla}</div>
+              <strong>{selecao.nome}</strong>
+              <span>Ver figurinhas</span>
+            </button>
+          ))}
+        </div>
+        {!selecoes.loading && !selecoes.data?.length && <EmptyState text="Nenhuma seleção cadastrada nesse grupo." />}
+      </section>
+    )
   }
 
   return (
     <section className="page-section">
       <div className="page-title">
-        <span>Trocas</span>
-        <h2>Figurinhas repetidas</h2>
-        <p>Pesquise por jogador, código, seleção, grupo, escudo ou foto da seleção.</p>
+        <span>{selecaoSelecionada.sigla}</span>
+        <h2>Repetidas - {selecaoSelecionada.nome}</h2>
+        <p>Use os botões para adicionar, aumentar, diminuir ou remover repetidas.</p>
       </div>
+      <button className="back-button" onClick={voltarParaSelecoes}>Voltar para seleções</button>
 
-      <div className="search-panel">
-        <input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Buscar figurinha..." />
-        <input type="number" min="1" value={quantidade} onChange={(event) => updateQuantidade(event.target.value)} aria-label="Quantidade" />
-      </div>
+      {(figurinhas.loading || repetidas.loading || coladas.loading || jogadores.loading) && <Loading />}
+      {figurinhas.error && <ErrorBox text={figurinhas.error} />}
+      {repetidas.error && <ErrorBox text={repetidas.error} />}
+      {coladas.error && <ErrorBox text={coladas.error} />}
+      {jogadores.error && <ErrorBox text={jogadores.error} />}
 
-      {sugestoes.loading && busca.trim().length > 1 && <Loading />}
-      {sugestoes.error && <ErrorBox text={sugestoes.error} />}
-      {sugestoes.data?.length ? (
-        <div className="simple-list suggestions">
-          {sugestoes.data.slice(0, 10).map((figurinha) => (
-            <button key={figurinha.id} className="list-row suggestion-row" onClick={() => adicionarRepetida(figurinha)}>
-              <span>
-                <strong>{figurinha.codigo} - {getStickerName(figurinha, jogadoresPorId)}</strong>
-                <small>{getSelectionName(figurinha, selecoesPorId)} · {getTypeLabel(figurinha.tipo)} · {figurinha.categoria || 'figurinha'}</small>
-              </span>
-              <small>Adicionar como repetida</small>
-            </button>
-          ))}
-        </div>
-      ) : busca.trim().length > 1 && !sugestoes.loading && <EmptyState text="Nenhuma figurinha encontrada." />}
-
-      <div className="list-panel">
-        <h3>Minhas repetidas</h3>
-        {(repetidas.loading || figurinhas.loading || jogadores.loading || selecoes.loading) && <Loading />}
-        {repetidas.error && <ErrorBox text={repetidas.error} />}
-        {figurinhas.error && <ErrorBox text={figurinhas.error} />}
-        {jogadores.error && <ErrorBox text={jogadores.error} />}
-        {selecoes.error && <ErrorBox text={selecoes.error} />}
-        <div className="simple-list">
-          {repetidas.data?.map((item) => {
-            const figurinha = getFigurinhaRepetida(item)
-            return (
-              <div key={item.id} className="list-row">
-                <span>
-                  <strong>{figurinha ? `${figurinha.codigo} - ${getStickerName(figurinha, jogadoresPorId)}` : `Figurinha #${item.figurinha_id}`}</strong>
-                  {figurinha && <small>{getSelectionName(figurinha, selecoesPorId)} · {getTypeLabel(figurinha.tipo)} · {figurinha.categoria || 'figurinha'}</small>}
-                </span>
-                <div className="quantity-actions">
-                  <button onClick={() => atualizar(item, item.quantidade - 1)}>-</button>
-                  <strong>{item.quantidade}</strong>
-                  <button onClick={() => atualizar(item, item.quantidade + 1)}>+</button>
+      <div className="stickers-grid">
+        {figurinhas.data?.map((figurinha) => {
+          const repetida = repetidasPorFigurinhaId.get(figurinha.id)
+          const quantidade = repetida?.quantidade || 0
+          const isColada = coladasIds.has(figurinha.id)
+          return (
+            <article key={figurinha.id} className={isColada ? 'sticker-card repeated-card completed' : 'sticker-card repeated-card'}>
+              {isColada && (
+                <div className="completed-icon" aria-label="Figurinha colada">
+                  <CheckCircle2 aria-hidden="true" />
                 </div>
+              )}
+              <div className="sticker-code">{figurinha.codigo}</div>
+              <strong className="player-name">{getStickerName(figurinha, jogadoresPorId)}</strong>
+              <span className={`type-badge ${figurinha.tipo}`}>{getTypeLabel(figurinha.tipo)}</span>
+              <small>{figurinha.categoria || 'figurinha'} {figurinha.numero_global ? `#${figurinha.numero_global}` : ''}</small>
+              <small>{isColada ? 'Já colada no álbum' : 'Ainda faltando no álbum'}</small>
+              <div className="repeated-status">
+                <span>Repetidas</span>
+                <strong>{quantidade}</strong>
               </div>
-            )
-          })}
-        </div>
-        {!repetidas.loading && !repetidas.data?.length && <EmptyState text="Nenhuma repetida cadastrada." />}
+              <div className="quantity-actions card-quantity-actions">
+                <button onClick={() => atualizarRepetida(figurinha, quantidade - 1)} disabled={quantidade === 0}>-</button>
+                <button onClick={() => atualizarRepetida(figurinha, quantidade + 1)}>+</button>
+              </div>
+            </article>
+          )
+        })}
       </div>
+      {!figurinhas.loading && !figurinhas.data?.length && <EmptyState text="Nenhuma figurinha encontrada para essa seleção." />}
     </section>
   )
 }
