@@ -37,7 +37,12 @@ def listar_jogadores_da_selecao(selecao_id: int, db: Session = Depends(get_db)):
 def listar_figurinhas_da_selecao(selecao_id: int, db: Session = Depends(get_db)):
     if not db.get(Selecao, selecao_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Seleção não encontrada")
-    return db.query(Figurinha).filter(Figurinha.selecao_id == selecao_id).order_by(Figurinha.codigo).all()
+    return (
+        db.query(Figurinha)
+        .filter(Figurinha.selecao_id == selecao_id)
+        .order_by(Figurinha.numero_global.asc().nulls_last(), Figurinha.codigo.asc())
+        .all()
+    )
 
 
 @router.post("", response_model=SelecaoResponse, status_code=status.HTTP_201_CREATED)
