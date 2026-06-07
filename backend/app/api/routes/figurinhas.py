@@ -12,32 +12,37 @@ from app.schemas.figurinha_schema import FigurinhaCreate, FigurinhaResponse, Fig
 router = APIRouter()
 
 
+def ordenar_por_numero_global(query):
+    return query.order_by(Figurinha.numero_global.asc().nulls_last(), Figurinha.codigo.asc())
+
+
 @router.get("", response_model=list[FigurinhaResponse])
 def listar_figurinhas(db: Session = Depends(get_db)):
-    return db.query(Figurinha).order_by(Figurinha.codigo).all()
+    return ordenar_por_numero_global(db.query(Figurinha)).all()
 
 
 @router.get("/search", response_model=list[FigurinhaResponse])
 def pesquisar_figurinhas(termo: str = Query(min_length=1), db: Session = Depends(get_db)):
     termo_busca = f"%{termo}%"
     return (
-        db.query(Figurinha)
-        .join(Selecao, Selecao.id == Figurinha.selecao_id)
-        .join(Grupo, Grupo.id == Selecao.grupo_id)
-        .outerjoin(Jogador, Jogador.id == Figurinha.jogador_id)
-        .filter(
-            or_(
-                Figurinha.codigo.ilike(termo_busca),
-                Figurinha.tipo.ilike(termo_busca),
-                Figurinha.nome.ilike(termo_busca),
-                Figurinha.categoria.ilike(termo_busca),
-                Jogador.nome.ilike(termo_busca),
-                Selecao.nome.ilike(termo_busca),
-                Selecao.sigla.ilike(termo_busca),
-                Grupo.nome.ilike(termo_busca),
+        ordenar_por_numero_global(
+            db.query(Figurinha)
+            .join(Selecao, Selecao.id == Figurinha.selecao_id)
+            .join(Grupo, Grupo.id == Selecao.grupo_id)
+            .outerjoin(Jogador, Jogador.id == Figurinha.jogador_id)
+            .filter(
+                or_(
+                    Figurinha.codigo.ilike(termo_busca),
+                    Figurinha.tipo.ilike(termo_busca),
+                    Figurinha.nome.ilike(termo_busca),
+                    Figurinha.categoria.ilike(termo_busca),
+                    Jogador.nome.ilike(termo_busca),
+                    Selecao.nome.ilike(termo_busca),
+                    Selecao.sigla.ilike(termo_busca),
+                    Grupo.nome.ilike(termo_busca),
+                )
             )
         )
-        .order_by(Figurinha.codigo)
         .all()
     )
 
@@ -46,7 +51,7 @@ def pesquisar_figurinhas(termo: str = Query(min_length=1), db: Session = Depends
 def listar_figurinhas_por_selecao(selecao_id: int, db: Session = Depends(get_db)):
     if not db.get(Selecao, selecao_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Seleção não encontrada")
-    return db.query(Figurinha).filter(Figurinha.selecao_id == selecao_id).order_by(Figurinha.codigo).all()
+    return ordenar_por_numero_global(db.query(Figurinha).filter(Figurinha.selecao_id == selecao_id)).all()
 
 
 @router.get("/{figurinha_id}", response_model=FigurinhaResponse)
