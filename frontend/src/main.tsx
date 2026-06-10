@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
+<<<<<<< HEAD
 import { Album, BarChart3, Repeat2 } from 'lucide-react'
 import { BrowserRouter } from 'react-router-dom'
+=======
+import { Album, BarChart3, CheckCircle2, Repeat2 } from 'lucide-react'
+>>>>>>> cd5354a349f27c81cdba45ce1e34f9cf5afa0eb1
 import './style.css'
 
 type View = 'dashboard' | 'album' | 'grupo' | 'selecao' | 'repetidas'
@@ -26,7 +30,7 @@ type Figurinha = {
   status_cadastro?: string | null
 }
 type Colada = { id: number; figurinha_id: number; data_colagem: string }
-type Repetida = { id: number; figurinha_id: number; quantidade: number }
+type Repetida = { id: number; figurinha_id: number; quantidade: number; figurinha?: Figurinha | null }
 type DashboardResumo = {
   total_figurinhas: number
   total_coladas: number
@@ -73,6 +77,16 @@ function useApi<T>(loader: () => Promise<T>, deps: React.DependencyList) {
   }, deps)
 
   return { data, loading, error }
+}
+
+function normalizeText(value: string | number | null | undefined) {
+  return String(value || '').toLowerCase().trim()
+}
+
+function matchesSearch(values: Array<string | number | null | undefined>, search: string) {
+  const term = normalizeText(search)
+  if (!term) return true
+  return values.some((value) => normalizeText(value).includes(term))
 }
 
 function getStickerName(fig: Figurinha, jogadoresPorId?: Map<number, Jogador>) {
@@ -205,7 +219,7 @@ function AlbumPage({ onOpenGrupo }: { onOpenGrupo: (grupo: Grupo) => void }) {
   )
 }
 
-function GrupoPage({ grupo, onOpenSelecao }: { grupo: Grupo | null; onOpenSelecao: (selecao: Selecao) => void }) {
+function GrupoPage({ grupo, onOpenSelecao, onBack }: { grupo: Grupo | null; onOpenSelecao: (selecao: Selecao) => void; onBack: () => void }) {
   const selecoes = useApi<Selecao[]>(() => grupo ? api(`/grupos/${grupo.id}/selecoes`) : Promise.resolve([]), [grupo?.id])
 
   if (!grupo) return <EmptyState text="Selecione um grupo na tela Álbum." />
@@ -217,6 +231,7 @@ function GrupoPage({ grupo, onOpenSelecao }: { grupo: Grupo | null; onOpenSeleca
         <h2>Seleções do grupo</h2>
         <p>Abra uma seleção para controlar suas figurinhas.</p>
       </div>
+      <button className="back-button" onClick={onBack}>Voltar para grupos</button>
       {selecoes.loading && <Loading />}
       {selecoes.error && <ErrorBox text={selecoes.error} />}
       <div className="card-grid team-grid">
@@ -233,7 +248,7 @@ function GrupoPage({ grupo, onOpenSelecao }: { grupo: Grupo | null; onOpenSeleca
   )
 }
 
-function SelecaoPage({ selecao }: { selecao: Selecao | null }) {
+function SelecaoPage({ selecao, onBack }: { selecao: Selecao | null; onBack: () => void }) {
   const [refresh, setRefresh] = useState(0)
   const [filter, setFilter] = useState('todas')
   const figurinhas = useApi<Figurinha[]>(() => selecao ? api(`/selecoes/${selecao.id}/figurinhas`) : Promise.resolve([]), [selecao?.id, refresh])
@@ -273,6 +288,7 @@ function SelecaoPage({ selecao }: { selecao: Selecao | null }) {
         <h2>{selecao.nome}</h2>
         <p>Controle as figurinhas coladas e faltantes dessa seleção.</p>
       </div>
+      <button className="back-button" onClick={onBack}>Voltar para seleções</button>
 
       <div className="filter-row">
         {['todas', 'normais', 'brilhantes', 'coladas', 'faltantes'].map((item) => (
@@ -290,12 +306,19 @@ function SelecaoPage({ selecao }: { selecao: Selecao | null }) {
           const isColada = coladasIds.has(figurinha.id)
           return (
             <article key={figurinha.id} className={isColada ? 'sticker-card completed' : 'sticker-card'}>
+              {isColada && (
+                <div className="completed-icon" aria-label="Figurinha colada">
+                  <CheckCircle2 aria-hidden="true" />
+                </div>
+              )}
               <div className="sticker-code">{figurinha.codigo}</div>
               <strong className="player-name">{getStickerName(figurinha, jogadoresPorId)}</strong>
               <span className={`type-badge ${figurinha.tipo}`}>{getTypeLabel(figurinha.tipo)}</span>
               <small>{figurinha.categoria || 'figurinha'} {figurinha.numero_global ? `#${figurinha.numero_global}` : ''}</small>
               <small>{isColada ? 'Colada' : 'Faltando'}</small>
-              <button onClick={() => toggleColada(figurinha)}>{isColada ? 'Desmarcar' : 'Marcar'}</button>
+              <button className={isColada ? 'card-action unmark' : 'card-action mark'} onClick={() => toggleColada(figurinha)}>
+                {isColada ? 'Desmarcar' : 'Marcar'}
+              </button>
             </article>
           )
         })}
@@ -307,77 +330,166 @@ function SelecaoPage({ selecao }: { selecao: Selecao | null }) {
 
 function RepetidasPage() {
   const [refresh, setRefresh] = useState(0)
+  const [grupoSelecionado, setGrupoSelecionado] = useState<Grupo | null>(null)
+  const [selecaoSelecionada, setSelecaoSelecionada] = useState<Selecao | null>(null)
   const [busca, setBusca] = useState('')
-  const [quantidade, setQuantidade] = useState(1)
+  const grupos = useApi<Grupo[]>(() => api('/grupos'), [])
+  const selecoes = useApi<Selecao[]>(() => grupoSelecionado ? api(`/grupos/${grupoSelecionado.id}/selecoes`) : Promise.resolve([]), [grupoSelecionado?.id])
+  const figurinhas = useApi<Figurinha[]>(() => selecaoSelecionada ? api(`/selecoes/${selecaoSelecionada.id}/figurinhas`) : Promise.resolve([]), [selecaoSelecionada?.id, refresh])
   const repetidas = useApi<Repetida[]>(() => api('/repetidas'), [refresh])
-  const sugestoes = useApi<Figurinha[]>(() => busca.length > 1 ? api(`/figurinhas/search?termo=${encodeURIComponent(busca)}`) : Promise.resolve([]), [busca, refresh])
-  const figurinhas = useApi<Figurinha[]>(() => api('/figurinhas'), [refresh])
+  const coladas = useApi<Colada[]>(() => api('/figurinhas-coladas'), [refresh])
   const jogadores = useApi<Jogador[]>(() => api('/jogadores'), [])
 
-  const figurinhasPorId = useMemo(() => new Map((figurinhas.data || []).map((item) => [item.id, item])), [figurinhas.data])
   const jogadoresPorId = useMemo(() => new Map((jogadores.data || []).map((jogador) => [jogador.id, jogador])), [jogadores.data])
+  const coladasIds = useMemo(() => new Set((coladas.data || []).map((item) => item.figurinha_id)), [coladas.data])
+  const repetidasPorFigurinhaId = useMemo(() => new Map((repetidas.data || []).map((item) => [item.figurinha_id, item])), [repetidas.data])
+  const gruposFiltrados = useMemo(() => (grupos.data || []).filter((grupo) => matchesSearch([grupo.nome], busca)), [grupos.data, busca])
+  const selecoesFiltradas = useMemo(() => (selecoes.data || []).filter((selecao) => matchesSearch([selecao.nome, selecao.sigla], busca)), [selecoes.data, busca])
+  const figurinhasFiltradas = useMemo(() => (figurinhas.data || []).filter((figurinha) => {
+    const jogador = figurinha.jogador_id ? jogadoresPorId.get(figurinha.jogador_id) : null
+    return matchesSearch([
+      figurinha.codigo,
+      figurinha.tipo,
+      figurinha.nome,
+      figurinha.categoria,
+      figurinha.numero_global,
+      figurinha.numero_na_selecao,
+      jogador?.nome,
+      jogador?.posicao,
+      jogador?.numero,
+    ], busca)
+  }), [figurinhas.data, jogadoresPorId, busca])
 
-  async function adicionarRepetida(figurinha: Figurinha) {
-    await api('/repetidas', { method: 'POST', body: JSON.stringify({ figurinha_id: figurinha.id, quantidade }) })
+  function abrirGrupo(grupo: Grupo) {
+    setGrupoSelecionado(grupo)
+    setSelecaoSelecionada(null)
     setBusca('')
-    setQuantidade(1)
+  }
+
+  function abrirSelecao(selecao: Selecao) {
+    setSelecaoSelecionada(selecao)
+    setBusca('')
+  }
+
+  function voltarParaGrupos() {
+    setGrupoSelecionado(null)
+    setSelecaoSelecionada(null)
+    setBusca('')
+  }
+
+  function voltarParaSelecoes() {
+    setSelecaoSelecionada(null)
+    setBusca('')
+  }
+
+  async function atualizarRepetida(figurinha: Figurinha, novaQuantidade: number) {
+    const repetida = repetidasPorFigurinhaId.get(figurinha.id)
+    if (repetida && novaQuantidade <= 0) {
+      await api(`/repetidas/${repetida.id}`, { method: 'DELETE' })
+    } else if (repetida) {
+      await api(`/repetidas/${repetida.id}`, { method: 'PUT', body: JSON.stringify({ quantidade: novaQuantidade }) })
+    } else {
+      await api('/repetidas', { method: 'POST', body: JSON.stringify({ figurinha_id: figurinha.id, quantidade: 1 }) })
+    }
     setRefresh((value) => value + 1)
   }
 
-  async function atualizar(item: Repetida, novaQuantidade: number) {
-    if (novaQuantidade <= 0) {
-      await api(`/repetidas/${item.id}`, { method: 'DELETE' })
-    } else {
-      await api(`/repetidas/${item.id}`, { method: 'PUT', body: JSON.stringify({ quantidade: novaQuantidade }) })
-    }
-    setRefresh((value) => value + 1)
+  if (!grupoSelecionado) {
+    return (
+      <section className="page-section">
+        <div className="page-title">
+          <span>Trocas</span>
+          <h2>Grupos das repetidas</h2>
+          <p>Escolha um grupo para cadastrar e controlar suas figurinhas repetidas.</p>
+        </div>
+        <input className="album-search" value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Pesquisar grupo..." />
+        {grupos.loading && <Loading />}
+        {grupos.error && <ErrorBox text={grupos.error} />}
+        <div className="card-grid album-grid">
+          {gruposFiltrados.map((grupo) => (
+            <button key={grupo.id} className="group-card" onClick={() => abrirGrupo(grupo)}>
+              <span>{grupo.nome}</span>
+              <strong>Ver seleções</strong>
+            </button>
+          ))}
+        </div>
+        {!grupos.loading && !gruposFiltrados.length && <EmptyState text="Nenhum grupo encontrado." />}
+      </section>
+    )
+  }
+
+  if (!selecaoSelecionada) {
+    return (
+      <section className="page-section">
+        <div className="page-title">
+          <span>{grupoSelecionado.nome}</span>
+          <h2>Seleções das repetidas</h2>
+          <p>Escolha uma seleção para adicionar ou remover repetidas.</p>
+        </div>
+        <button className="back-button" onClick={voltarParaGrupos}>Voltar para grupos</button>
+        <input className="album-search" value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Pesquisar seleção..." />
+        {selecoes.loading && <Loading />}
+        {selecoes.error && <ErrorBox text={selecoes.error} />}
+        <div className="card-grid team-grid">
+          {selecoesFiltradas.map((selecao) => (
+            <button key={selecao.id} className="team-card" onClick={() => abrirSelecao(selecao)}>
+              <div className="team-badge">{selecao.sigla}</div>
+              <strong>{selecao.nome}</strong>
+              <span>Ver figurinhas</span>
+            </button>
+          ))}
+        </div>
+        {!selecoes.loading && !selecoesFiltradas.length && <EmptyState text="Nenhuma seleção encontrada nesse grupo." />}
+      </section>
+    )
   }
 
   return (
     <section className="page-section">
       <div className="page-title">
-        <span>Trocas</span>
-        <h2>Figurinhas repetidas</h2>
-        <p>Pesquise por jogador, código, seleção, grupo, escudo ou foto da seleção.</p>
+        <span>{selecaoSelecionada.sigla}</span>
+        <h2>Repetidas - {selecaoSelecionada.nome}</h2>
+        <p>Use os botões para adicionar, aumentar, diminuir ou remover repetidas.</p>
       </div>
+      <button className="back-button" onClick={voltarParaSelecoes}>Voltar para seleções</button>
+      <input className="album-search" value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Pesquisar jogador, código, tipo ou categoria..." />
 
-      <div className="search-panel">
-        <input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Buscar figurinha..." />
-        <input type="number" min="1" value={quantidade} onChange={(event) => setQuantidade(Number(event.target.value))} />
-      </div>
+      {(figurinhas.loading || repetidas.loading || coladas.loading || jogadores.loading) && <Loading />}
+      {figurinhas.error && <ErrorBox text={figurinhas.error} />}
+      {repetidas.error && <ErrorBox text={repetidas.error} />}
+      {coladas.error && <ErrorBox text={coladas.error} />}
+      {jogadores.error && <ErrorBox text={jogadores.error} />}
 
-      {sugestoes.data?.length ? (
-        <div className="simple-list suggestions">
-          {sugestoes.data.slice(0, 10).map((figurinha) => (
-            <button key={figurinha.id} className="list-row" onClick={() => adicionarRepetida(figurinha)}>
-              <span>{figurinha.codigo} - {getStickerName(figurinha, jogadoresPorId)}</span>
-              <small>{getTypeLabel(figurinha.tipo)} · {figurinha.categoria || 'figurinha'} · adicionar repetida</small>
-            </button>
-          ))}
-        </div>
-      ) : busca.length > 1 && !sugestoes.loading && <EmptyState text="Nenhuma figurinha encontrada." />}
-
-      <div className="list-panel">
-        <h3>Minhas repetidas</h3>
-        {(repetidas.loading || figurinhas.loading || jogadores.loading) && <Loading />}
-        {repetidas.error && <ErrorBox text={repetidas.error} />}
-        <div className="simple-list">
-          {repetidas.data?.map((item) => {
-            const figurinha = figurinhasPorId.get(item.figurinha_id)
-            return (
-              <div key={item.id} className="list-row">
-                <span>{figurinha ? `${figurinha.codigo} - ${getStickerName(figurinha, jogadoresPorId)}` : `Figurinha #${item.figurinha_id}`}</span>
-                <div className="quantity-actions">
-                  <button onClick={() => atualizar(item, item.quantidade - 1)}>-</button>
-                  <strong>{item.quantidade}</strong>
-                  <button onClick={() => atualizar(item, item.quantidade + 1)}>+</button>
+      <div className="stickers-grid">
+        {figurinhasFiltradas.map((figurinha) => {
+          const repetida = repetidasPorFigurinhaId.get(figurinha.id)
+          const quantidade = repetida?.quantidade || 0
+          const isColada = coladasIds.has(figurinha.id)
+          return (
+            <article key={figurinha.id} className={isColada ? 'sticker-card repeated-card completed' : 'sticker-card repeated-card'}>
+              {isColada && (
+                <div className="completed-icon" aria-label="Figurinha colada">
+                  <CheckCircle2 aria-hidden="true" />
                 </div>
+              )}
+              <div className="sticker-code">{figurinha.codigo}</div>
+              <strong className="player-name">{getStickerName(figurinha, jogadoresPorId)}</strong>
+              <span className={`type-badge ${figurinha.tipo}`}>{getTypeLabel(figurinha.tipo)}</span>
+              <small>{figurinha.categoria || 'figurinha'} {figurinha.numero_global ? `#${figurinha.numero_global}` : ''}</small>
+              <small>{isColada ? 'Já colada no álbum' : 'Ainda faltando no álbum'}</small>
+              <div className="repeated-status">
+                <span>Repetidas</span>
+                <strong>{quantidade}</strong>
               </div>
-            )
-          })}
-        </div>
-        {!repetidas.loading && !repetidas.data?.length && <EmptyState text="Nenhuma repetida cadastrada." />}
+              <div className="quantity-actions card-quantity-actions">
+                <button onClick={() => atualizarRepetida(figurinha, quantidade - 1)} disabled={quantidade === 0}>-</button>
+                <button onClick={() => atualizarRepetida(figurinha, quantidade + 1)}>+</button>
+              </div>
+            </article>
+          )
+        })}
       </div>
+      {!figurinhas.loading && !figurinhasFiltradas.length && <EmptyState text="Nenhuma figurinha encontrada para essa busca." />}
     </section>
   )
 }
@@ -396,6 +508,17 @@ function App() {
   function openSelecao(selecao: Selecao) {
     setSelecaoSelecionada(selecao)
     setView('selecao')
+  }
+
+  function voltarAlbumParaGrupos() {
+    setGrupoSelecionado(null)
+    setSelecaoSelecionada(null)
+    setView('album')
+  }
+
+  function voltarAlbumParaSelecoes() {
+    setSelecaoSelecionada(null)
+    setView('grupo')
   }
 
   return (
@@ -423,8 +546,8 @@ function App() {
       <section className="content">
         {view === 'dashboard' && <Dashboard />}
         {view === 'album' && <AlbumPage onOpenGrupo={openGrupo} />}
-        {view === 'grupo' && <GrupoPage grupo={grupoSelecionado} onOpenSelecao={openSelecao} />}
-        {view === 'selecao' && <SelecaoPage selecao={selecaoSelecionada} />}
+        {view === 'grupo' && <GrupoPage grupo={grupoSelecionado} onOpenSelecao={openSelecao} onBack={voltarAlbumParaGrupos} />}
+        {view === 'selecao' && <SelecaoPage selecao={selecaoSelecionada} onBack={voltarAlbumParaSelecoes} />}
         {view === 'repetidas' && <RepetidasPage />}
       </section>
     </main>

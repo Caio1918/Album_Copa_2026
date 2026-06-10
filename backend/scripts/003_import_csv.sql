@@ -22,7 +22,7 @@ CREATE TEMP TABLE tmp_album_stickers_import (
     status_cadastro VARCHAR(40)
 );
 
-\copy tmp_album_stickers_import (number_global, team_slot, code, type, category, section, group_name, team_name, country_code, name, player, position, notes, source_url, status_cadastro) FROM '/srv/album_copa/Album_Copa_2026/backend/scripts/tabela_figurinhas_album_copa_2026_atualizada.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',', ENCODING 'UTF8')
+\copy tmp_album_stickers_import (number_global, team_slot, code, type, category, section, group_name, team_name, country_code, name, player, position, notes, source_url, status_cadastro) FROM '/srv/album_copa/Album_Copa_2026/backend/scripts/tabela_figurinhas_album_copa_2026.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',', ENCODING 'UTF8')
 
 INSERT INTO grupos (nome)
 SELECT DISTINCT NULLIF(TRIM(group_name), '')
