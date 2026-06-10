@@ -1,11 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
-<<<<<<< HEAD
 import { Album, BarChart3, Repeat2 } from 'lucide-react'
 import { BrowserRouter } from 'react-router-dom'
-=======
 import { Album, BarChart3, CheckCircle2, Repeat2 } from 'lucide-react'
->>>>>>> cd5354a349f27c81cdba45ce1e34f9cf5afa0eb1
 import './style.css'
 
 type View = 'dashboard' | 'album' | 'grupo' | 'selecao' | 'repetidas'
