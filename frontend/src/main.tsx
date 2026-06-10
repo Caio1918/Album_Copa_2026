@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { Album, BarChart3, Repeat2 } from 'lucide-react'
+import { BrowserRouter } from 'react-router-dom'
 import './style.css'
 
 type View = 'dashboard' | 'album' | 'grupo' | 'selecao' | 'repetidas'
@@ -432,6 +433,8 @@ function App() {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <BrowserRouter basename="/album">
+      <App />
+    </BrowserRouter>
   </React.StrictMode>,
 )
