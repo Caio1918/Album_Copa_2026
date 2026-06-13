@@ -95,7 +95,6 @@ export type FigurinhaColada = {
   data_colagem?: string;
   dataColagem?: string;
 };
-
 export type FigurinhaRepetida = {
   id: number;
   figurinha_id?: number;
