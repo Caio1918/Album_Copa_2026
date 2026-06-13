@@ -1,208 +1,243 @@
-import type {
-  AddRepeatedStickerPayload,
-  AlbumData,
-  AlbumStats,
-  Group,
-  ProgressSummary,
-  Sticker,
-  StickerType,
-  Team,
-  UpdateStickerPastedPayload,
-  UpdateStickerQuantityPayload,
-} from '../types/album';
+const API_BASE_URL = (import.meta.env.VITE_API_URL || '/album/api').replace(/\/$/, '');
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8002';
+type QueryParams = Record<string, string | number | boolean | null | undefined>;
 
-const ENDPOINTS = {
-  album: '/album',
-  pasted: (stickerId: string) => `/album/figurinhas/${stickerId}/colada`,
-  quantity: (stickerId: string) => `/album/figurinhas/${stickerId}/quantidade`,
-  repeated: '/album/repetidas',
+type RequestOptions = Omit<RequestInit, 'body'> & {
+  body?: unknown;
+  params?: QueryParams;
 };
 
-type ApiRecord = Record<string, unknown>;
+function buildUrl(path: string, params?: QueryParams) {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const url = new URL(`${API_BASE_URL}${normalizedPath}`, window.location.origin);
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        url.searchParams.set(key, String(value));
+      }
+    });
+  }
+
+  return url.toString();
+}
+
+async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { body, params, headers, ...rest } = options;
+
+  const response = await fetch(buildUrl(path, params), {
+    ...rest,
     headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...headers,
     },
-    ...options,
+    body: body ? JSON.stringify(body) : undefined,
   });
 
   if (!response.ok) {
-    const message = await response.text().catch(() => '');
-    throw new Error(message || `Erro na requisição: ${response.status}`);
+    const errorText = await response.text();
+    throw new Error(errorText || `Erro ${response.status} ao acessar ${path}`);
   }
 
   if (response.status === 204) {
-    return undefined as T;
+    return null as T;
   }
 
   return response.json() as Promise<T>;
 }
 
-function readString(record: ApiRecord, keys: string[], fallback = ''): string {
-  for (const key of keys) {
-    const value = record[key];
-    if (value !== undefined && value !== null) return String(value);
-  }
+export type Grupo = {
+  id: number;
+  nome: string;
+  codigo?: string;
+};
 
-  return fallback;
-}
+export type Selecao = {
+  id: number;
+  nome: string;
+  grupo_id?: number;
+  grupoId?: number;
+  escudo_url?: string | null;
+  escudoUrl?: string | null;
+};
 
-function readNumber(record: ApiRecord, keys: string[], fallback = 0): number {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === 'number') return value;
-    if (typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Number(value))) return Number(value);
-  }
+export type Jogador = {
+  id: number;
+  nome: string;
+  selecao_id?: number;
+  selecaoId?: number;
+  posicao?: string | null;
+};
 
-  return fallback;
-}
+export type Figurinha = {
+  id: number;
+  codigo?: string;
+  numero?: number;
+  tipo?: string;
+  brilhante?: boolean;
+  colada?: boolean;
+  quantidade?: number;
+  jogador_id?: number | null;
+  jogadorId?: number | null;
+  selecao_id?: number | null;
+  selecaoId?: number | null;
+  jogador?: Jogador;
+  selecao?: Selecao;
+};
 
-function readBoolean(record: ApiRecord, keys: string[], fallback = false): boolean {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === 'boolean') return value;
-    if (typeof value === 'number') return value > 0;
-    if (typeof value === 'string') return ['true', '1', 'sim', 'colada'].includes(value.toLowerCase());
-  }
+export type FigurinhaColada = {
+  id: number;
+  figurinha_id?: number;
+  figurinhaId?: number;
+  figurinha?: Figurinha;
+  created_at?: string;
+  createdAt?: string;
+  data_colagem?: string;
+  dataColagem?: string;
+};
 
-  return fallback;
-}
+export type FigurinhaRepetida = {
+  id: number;
+  figurinha_id?: number;
+  figurinhaId?: number;
+  figurinha?: Figurinha;
+  quantidade: number;
+};
 
-function normalizeStickerType(value: unknown): StickerType {
-  const normalized = String(value ?? 'NORMAL').toUpperCase();
-  return normalized === 'SHINY' || normalized === 'BRILHANTE' ? 'SHINY' : 'NORMAL';
-}
+export type DashboardResumo = {
+  total_figurinhas?: number;
+  totalFigurinhas?: number;
+  total_coladas?: number;
+  totalColadas?: number;
+  total_faltantes?: number;
+  totalFaltantes?: number;
+  total_repetidas?: number;
+  totalRepetidas?: number;
+  porcentagem_coladas?: number;
+  porcentagemColadas?: number;
+  faltantes_normais?: number;
+  faltantesNormais?: number;
+  faltantes_brilhantes?: number;
+  faltantesBrilhantes?: number;
+};
 
-function normalizeGroup(group: ApiRecord): Group {
-  return {
-    id: readString(group, ['id', 'grupo_id', 'groupId']),
-    name: readString(group, ['name', 'nome', 'titulo'], 'Grupo'),
-    order: readNumber(group, ['order', 'ordem', 'position', 'posicao'], 0),
+export type AlbumData = {
+  dashboard: {
+    resumo: DashboardResumo;
+    progresso: unknown;
+    faltantes: unknown;
+    ultimasColadas: FigurinhaColada[];
   };
-}
+  grupos: Grupo[];
+  selecoes: Selecao[];
+  figurinhas: Figurinha[];
+  repetidas: FigurinhaRepetida[];
+  faltantes: Figurinha[];
+};
 
-function normalizeTeam(team: ApiRecord): Team {
+export const albumService = {
+  getHealth: () => apiRequest<{ status: string }>('/health'),
+
+  getDashboardResumo: () => apiRequest<DashboardResumo>('/dashboard/resumo'),
+  getDashboardProgresso: () => apiRequest<unknown>('/dashboard/progresso'),
+  getDashboardFaltantes: () => apiRequest<unknown>('/dashboard/faltantes'),
+  getDashboardUltimasColadas: () => apiRequest<FigurinhaColada[]>('/dashboard/ultimas-coladas'),
+
+  getGrupos: () => apiRequest<Grupo[]>('/grupos'),
+  getGrupo: (grupoId: number | string) => apiRequest<Grupo>(`/grupos/${grupoId}`),
+  getSelecoesDoGrupo: (grupoId: number | string) => apiRequest<Selecao[]>(`/grupos/${grupoId}/selecoes`),
+
+  getSelecoes: () => apiRequest<Selecao[]>('/selecoes'),
+  getSelecao: (selecaoId: number | string) => apiRequest<Selecao>(`/selecoes/${selecaoId}`),
+  getJogadoresDaSelecao: (selecaoId: number | string) => apiRequest<Jogador[]>(`/selecoes/${selecaoId}/jogadores`),
+  getFigurinhasDaSelecao: (selecaoId: number | string) => apiRequest<Figurinha[]>(`/selecoes/${selecaoId}/figurinhas`),
+
+  getJogadores: () => apiRequest<Jogador[]>('/jogadores'),
+  searchJogadores: (q: string) => apiRequest<Jogador[]>('/jogadores/search', { params: { q } }),
+  getJogador: (jogadorId: number | string) => apiRequest<Jogador>(`/jogadores/${jogadorId}`),
+
+  getFigurinhas: () => apiRequest<Figurinha[]>('/figurinhas'),
+  searchFigurinhas: (q: string) => apiRequest<Figurinha[]>('/figurinhas/search', { params: { q } }),
+  getFigurinha: (figurinhaId: number | string) => apiRequest<Figurinha>(`/figurinhas/${figurinhaId}`),
+
+  getFigurinhasColadas: () => apiRequest<FigurinhaColada[]>('/figurinhas-coladas'),
+  getUltimasFigurinhasColadas: () => apiRequest<FigurinhaColada[]>('/figurinhas-coladas/ultimas'),
+  addFigurinhaColada: (figurinhaId: number | string) =>
+    apiRequest<FigurinhaColada>('/figurinhas-coladas', {
+      method: 'POST',
+      body: { figurinha_id: Number(figurinhaId) },
+    }),
+
+  getRepetidas: () => apiRequest<FigurinhaRepetida[]>('/repetidas'),
+  searchRepetidas: (q: string) => apiRequest<FigurinhaRepetida[]>('/repetidas/search', { params: { q } }),
+  getRepetida: (repetidaId: number | string) => apiRequest<FigurinhaRepetida>(`/repetidas/${repetidaId}`),
+  addRepetida: (figurinhaId: number | string, quantidade = 1) =>
+    apiRequest<FigurinhaRepetida>('/repetidas', {
+      method: 'POST',
+      body: {
+        figurinha_id: Number(figurinhaId),
+        quantidade,
+      },
+    }),
+
+  getFaltantes: () => apiRequest<Figurinha[]>('/faltantes'),
+  getFaltantesNormais: () => apiRequest<Figurinha[]>('/faltantes/normais'),
+  getFaltantesBrilhantes: () => apiRequest<Figurinha[]>('/faltantes/brilhantes'),
+  getFaltantesPorSelecao: (selecaoId: number | string) => apiRequest<Figurinha[]>(`/faltantes/selecao/${selecaoId}`),
+};
+
+export async function getDashboardData() {
+  const [resumo, progresso, faltantes, ultimasColadas] = await Promise.all([
+    albumService.getDashboardResumo(),
+    albumService.getDashboardProgresso(),
+    albumService.getDashboardFaltantes(),
+    albumService.getDashboardUltimasColadas(),
+  ]);
+
   return {
-    id: readString(team, ['id', 'selecao_id', 'teamId']),
-    name: readString(team, ['name', 'nome'], 'Seleção'),
-    code: readString(team, ['code', 'codigo', 'sigla'], ''),
-    flagUrl: readString(team, ['flagUrl', 'flag_url', 'bandeira_url'], ''),
-    groupId: readString(team, ['groupId', 'group_id', 'grupo_id']),
-  };
-}
-
-function normalizeSticker(sticker: ApiRecord): Sticker {
-  const quantity = readNumber(sticker, ['quantity', 'quantidade', 'qtd'], 0);
-  const isPasted = readBoolean(sticker, ['isPasted', 'is_pasted', 'colada'], quantity > 0);
-
-  return {
-    id: readString(sticker, ['id', 'figurinha_id', 'stickerId']),
-    number: readNumber(sticker, ['number', 'numero', 'número'], 0),
-    code: readString(sticker, ['code', 'codigo', 'código'], ''),
-    name: readString(sticker, ['name', 'nome', 'jogador'], 'Figurinha'),
-    type: normalizeStickerType(sticker.type ?? sticker.tipo),
-    imageUrl: readString(sticker, ['imageUrl', 'image_url', 'imagem_url'], ''),
-    quantity,
-    isPasted,
-    pastedAt: readString(sticker, ['pastedAt', 'pasted_at', 'colada_em'], ''),
-    teamId: readString(sticker, ['teamId', 'team_id', 'selecao_id']),
-    groupId: readString(sticker, ['groupId', 'group_id', 'grupo_id']),
-  };
-}
-
-function normalizeAlbumData(payload: unknown): AlbumData {
-  const data = payload as ApiRecord;
-  const rawGroups = (data.groups ?? data.grupos ?? []) as ApiRecord[];
-  const rawTeams = (data.teams ?? data.selecoes ?? data.seleções ?? []) as ApiRecord[];
-  const rawStickers = (data.stickers ?? data.figurinhas ?? []) as ApiRecord[];
-
-  return {
-    groups: rawGroups.map(normalizeGroup),
-    teams: rawTeams.map(normalizeTeam),
-    stickers: rawStickers.map(normalizeSticker),
+    resumo,
+    progresso,
+    faltantes,
+    ultimasColadas,
   };
 }
 
 export async function getAlbumData(): Promise<AlbumData> {
-  const payload = await request<unknown>(ENDPOINTS.album);
-  return normalizeAlbumData(payload);
-}
-
-export async function updateStickerPasted({ stickerId, isPasted }: UpdateStickerPastedPayload): Promise<void> {
-  await request<void>(ENDPOINTS.pasted(stickerId), {
-    method: 'PATCH',
-    body: JSON.stringify({ isPasted, colada: isPasted }),
-  });
-}
-
-export async function updateStickerQuantity({ stickerId, quantity }: UpdateStickerQuantityPayload): Promise<void> {
-  await request<void>(ENDPOINTS.quantity(stickerId), {
-    method: 'PATCH',
-    body: JSON.stringify({ quantity, quantidade: quantity }),
-  });
-}
-
-export async function addRepeatedSticker({ stickerId, quantity }: AddRepeatedStickerPayload): Promise<void> {
-  await request<void>(ENDPOINTS.repeated, {
-    method: 'POST',
-    body: JSON.stringify({ stickerId, figurinha_id: stickerId, quantity, quantidade: quantity }),
-  });
-}
-
-export function getTeamName(teamId: string, teams: Team[]): string {
-  return teams.find((team) => team.id === teamId)?.name ?? 'Seleção não encontrada';
-}
-
-export function getGroupName(groupId: string, groups: Group[]): string {
-  return groups.find((group) => group.id === groupId)?.name ?? 'Grupo não encontrado';
-}
-
-export function calculateAlbumStats(stickers: Sticker[]): AlbumStats {
-  const total = stickers.length;
-  const pasted = stickers.filter((sticker) => sticker.isPasted).length;
-  const missing = total - pasted;
-  const duplicates = stickers.reduce((sum, sticker) => sum + Math.max(sticker.quantity - 1, 0), 0);
-  const normalMissing = stickers.filter((sticker) => sticker.type === 'NORMAL' && !sticker.isPasted).length;
-  const shinyMissing = stickers.filter((sticker) => sticker.type === 'SHINY' && !sticker.isPasted).length;
-  const percentage = total > 0 ? Math.round((pasted / total) * 100) : 0;
+  const [dashboard, grupos, selecoes, figurinhas, repetidas, faltantes] = await Promise.all([
+    getDashboardData(),
+    albumService.getGrupos(),
+    albumService.getSelecoes(),
+    albumService.getFigurinhas(),
+    albumService.getRepetidas(),
+    albumService.getFaltantes(),
+  ]);
 
   return {
-    total,
-    pasted,
-    missing,
-    duplicates,
-    normalMissing,
-    shinyMissing,
-    percentage,
+    dashboard,
+    grupos,
+    selecoes,
+    figurinhas,
+    repetidas,
+    faltantes,
   };
 }
 
-export function getGroupProgress(group: Group, stickers: Sticker[]): ProgressSummary {
-  const groupStickers = stickers.filter((sticker) => sticker.groupId === group.id);
-  return getProgressSummary(groupStickers);
+export function getRepeatedStickers() {
+  return albumService.getRepetidas();
 }
 
-export function getTeamProgress(team: Team, stickers: Sticker[]): ProgressSummary {
-  const teamStickers = stickers.filter((sticker) => sticker.teamId === team.id);
-  return getProgressSummary(teamStickers);
+export function searchRepeatedStickers(q: string) {
+  return albumService.searchRepetidas(q);
 }
 
-function getProgressSummary(stickers: Sticker[]): ProgressSummary {
-  const total = stickers.length;
-  const pasted = stickers.filter((sticker) => sticker.isPasted).length;
-  const duplicates = stickers.reduce((sum, sticker) => sum + Math.max(sticker.quantity - 1, 0), 0);
-  const percentage = total > 0 ? Math.round((pasted / total) * 100) : 0;
+export function addRepeatedSticker(data: { figurinhaId?: number | string; figurinha_id?: number | string; quantidade?: number }) {
+  const figurinhaId = data.figurinhaId ?? data.figurinha_id;
 
-  return {
-    total,
-    pasted,
-    missing: total - pasted,
-    duplicates,
-    percentage,
-  };
+  if (!figurinhaId) {
+    throw new Error('figurinhaId é obrigatório para adicionar repetida');
+  }
+
+  return albumService.addRepetida(figurinhaId, data.quantidade ?? 1);
 }
+
+export default albumService;
