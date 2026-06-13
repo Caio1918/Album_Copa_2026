@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
-import { Album, BarChart3, Repeat2 } from 'lucide-react'
 import { BrowserRouter } from 'react-router-dom'
 import { Album, BarChart3, CheckCircle2, Repeat2 } from 'lucide-react'
 import './style.css'
@@ -38,7 +37,7 @@ type DashboardResumo = {
   total_repetidas: number
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || '/album/api'
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
