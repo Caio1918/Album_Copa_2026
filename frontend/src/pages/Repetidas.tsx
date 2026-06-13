@@ -1,35 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { AlbumData } from '../types/album';
+import type { AlbumData, Sticker } from '../types/album';
 import {
-  addRepeatedSticker,
   getAlbumData,
   getGroupName,
-  getGroupProgress,
   getTeamName,
-  getTeamProgress,
   updateStickerPasted,
   updateStickerQuantity,
 } from '../services/albumService';
-import { AddDuplicateModal } from '../components/AddDuplicateModal';
 import { EmptyState } from '../components/EmptyState';
-import { GroupCard } from '../components/GroupCard';
 import { PageHeader } from '../components/PageHeader';
+import { PlayerDuplicateProfile } from '../components/PlayerDuplicateProfile';
 import { SearchInput } from '../components/SearchInput';
 import { SectionHeader } from '../components/SectionHeader';
 import { StickerCard } from '../components/StickerCard';
-import { TeamCard } from '../components/TeamCard';
 
-type ViewMode = 'groups' | 'teams' | 'stickers';
+type ViewMode = 'list' | 'profile';
+
+const normalize = (value: string | number | undefined | null) => String(value ?? '').toLowerCase().trim();
 
 export function Repetidas() {
   const [albumData, setAlbumData] = useState<AlbumData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [viewMode, setViewMode] = useState<ViewMode>('groups');
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
 
   const loadRepeated = useCallback(async () => {
     try {
@@ -52,72 +47,36 @@ export function Repetidas() {
   const stickers = albumData?.stickers ?? [];
 
   const duplicateStickers = useMemo(() => stickers.filter((sticker) => sticker.quantity > 1), [stickers]);
-  const selectedGroup = groups.find((group) => group.id === selectedGroupId);
-  const selectedTeam = teams.find((team) => team.id === selectedTeamId);
+  const selectedSticker = stickers.find((sticker) => sticker.id === selectedStickerId) ?? null;
 
-  const groupsWithDuplicates = useMemo(() => {
-    const groupIds = new Set(duplicateStickers.map((sticker) => sticker.groupId));
-    return groups.filter((group) => groupIds.has(group.id));
-  }, [duplicateStickers, groups]);
+  const filteredStickers = useMemo(() => {
+    const term = normalize(query);
 
-  const teamsWithDuplicates = useMemo(() => {
-    if (!selectedGroupId) return [];
+    if (!term) {
+      return duplicateStickers.slice(0, 12);
+    }
 
-    const teamIds = new Set(
-      duplicateStickers
-        .filter((sticker) => sticker.groupId === selectedGroupId)
-        .map((sticker) => sticker.teamId),
-    );
+    return stickers
+      .filter((sticker) => {
+        const teamName = getTeamName(sticker.teamId, teams);
+        const groupName = getGroupName(sticker.groupId, groups);
 
-    return teams.filter((team) => team.groupId === selectedGroupId && teamIds.has(team.id));
-  }, [duplicateStickers, selectedGroupId, teams]);
+        return [sticker.name, sticker.code, String(sticker.number), teamName, groupName].some((field) =>
+          normalize(field).includes(term),
+        );
+      })
+      .slice(0, 16);
+  }, [duplicateStickers, groups, query, stickers, teams]);
 
-  const visibleDuplicateStickers = useMemo(() => {
-    if (!selectedTeamId) return [];
-
-    const term = query.toLowerCase().trim();
-    const teamDuplicates = duplicateStickers.filter((sticker) => sticker.teamId === selectedTeamId);
-
-    if (!term) return teamDuplicates;
-
-    return teamDuplicates.filter((sticker) => {
-      const teamName = getTeamName(sticker.teamId, teams);
-      const groupName = getGroupName(sticker.groupId, groups);
-
-      return [sticker.name, sticker.code, String(sticker.number), teamName, groupName].some((field) =>
-        field.toLowerCase().includes(term),
-      );
-    });
-  }, [duplicateStickers, groups, query, selectedTeamId, teams]);
-
-  function openGroup(groupId: string) {
-    setSelectedGroupId(groupId);
-    setSelectedTeamId(null);
-    setViewMode('teams');
+  function openPlayerProfile(sticker: Sticker) {
+    setSelectedStickerId(sticker.id);
+    setQuery(sticker.name);
+    setViewMode('profile');
   }
 
-  function openTeam(teamId: string) {
-    setSelectedTeamId(teamId);
-    setViewMode('stickers');
-  }
-
-  function backToGroups() {
-    setSelectedGroupId(null);
-    setSelectedTeamId(null);
-    setViewMode('groups');
-    setQuery('');
-  }
-
-  function backToTeams() {
-    setSelectedTeamId(null);
-    setViewMode('teams');
-    setQuery('');
-  }
-
-  async function handleAddDuplicate(stickerId: string, quantity: number) {
-    await addRepeatedSticker({ stickerId, quantity });
-    setModalOpen(false);
-    await loadRepeated();
+  function backToList() {
+    setSelectedStickerId(null);
+    setViewMode('list');
   }
 
   async function handleTogglePasted(stickerId: string) {
@@ -156,111 +115,60 @@ export function Repetidas() {
     <section className="space-y-8">
       <PageHeader
         title="Repetidas"
-        description="Visualize figurinhas com quantidade maior que 1 e adicione repetidas rapidamente."
-        action={
-          <button
-            type="button"
-            onClick={() => setModalOpen(true)}
-            className="rounded-2xl bg-blue-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-800"
-          >
-            + Adicionar repetida
-          </button>
-        }
+        description="Pesquise um jogador, abra o perfil da figurinha e ajuste a quantidade com + e -."
       />
 
-      {viewMode === 'groups' ? (
+      <div className="rounded-3xl border border-blue-100 bg-white p-4 shadow-sm md:p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Perfil do jogador</p>
+            <h2 className="mt-1 text-xl font-black text-slate-950">Pesquisar jogador</h2>
+            <p className="mt-1 text-sm text-slate-500">Digite o nome do jogador ou código da figurinha para abrir o perfil.</p>
+          </div>
+          <div className="w-full md:max-w-xl">
+            <SearchInput value={query} onChange={setQuery} placeholder="Ex.: Messi, Brasil, BRA 01..." />
+          </div>
+        </div>
+      </div>
+
+      {viewMode === 'profile' && selectedSticker ? (
+        <PlayerDuplicateProfile
+          sticker={selectedSticker}
+          teamName={getTeamName(selectedSticker.teamId, teams)}
+          groupName={getGroupName(selectedSticker.groupId, groups)}
+          onIncrease={handleIncrease}
+          onDecrease={handleDecrease}
+          onTogglePasted={handleTogglePasted}
+          onBack={backToList}
+        />
+      ) : (
         <div className="space-y-4">
-          <SectionHeader title="Grupos com repetidas" description="Apenas grupos que possuem figurinhas repetidas aparecem aqui." />
-          {groupsWithDuplicates.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {groupsWithDuplicates.map((group) => {
-                const progress = getGroupProgress(group, duplicateStickers);
-                return (
-                  <GroupCard
-                    key={group.id}
-                    group={group}
-                    total={progress.total}
-                    pasted={progress.pasted}
-                    missing={progress.missing}
-                    percentage={progress.percentage}
-                    onClick={() => openGroup(group.id)}
+          <SectionHeader
+            title={query.trim() ? 'Resultado da busca' : 'Jogadores com repetidas'}
+            description={query.trim() ? 'Clique em um jogador para abrir o perfil e alterar a quantidade.' : 'Figurinhas que já possuem quantidade maior que 1.'}
+          />
+
+          {filteredStickers.length > 0 ? (
+            <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
+              {filteredStickers.map((sticker) => (
+                <button key={sticker.id} type="button" onClick={() => openPlayerProfile(sticker)} className="text-left">
+                  <StickerCard
+                    sticker={sticker}
+                    teamName={getTeamName(sticker.teamId, teams)}
+                    groupName={getGroupName(sticker.groupId, groups)}
+                    showDuplicateCount
                   />
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyState title="Nenhuma repetida cadastrada" description="Use o botão de adicionar repetida para começar." />
-          )}
-        </div>
-      ) : null}
-
-      {viewMode === 'teams' && selectedGroup ? (
-        <div className="space-y-4">
-          <button type="button" onClick={backToGroups} className="text-sm font-bold text-blue-700 hover:text-blue-900">
-            ← Voltar para grupos
-          </button>
-          <SectionHeader title={selectedGroup.name} description="Seleções deste grupo que possuem repetidas." />
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {teamsWithDuplicates.map((team) => {
-              const progress = getTeamProgress(team, duplicateStickers);
-              return (
-                <TeamCard
-                  key={team.id}
-                  team={team}
-                  total={progress.total}
-                  pasted={progress.pasted}
-                  missing={progress.missing}
-                  duplicates={progress.duplicates}
-                  percentage={progress.percentage}
-                  onClick={() => openTeam(team.id)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-
-      {viewMode === 'stickers' && selectedTeam ? (
-        <div className="space-y-4">
-          <button type="button" onClick={backToTeams} className="text-sm font-bold text-blue-700 hover:text-blue-900">
-            ← Voltar para seleções
-          </button>
-          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <SectionHeader title={`Repetidas - ${selectedTeam.name}`} description="Quantidade repetida = quantidade total - 1." />
-            <div className="w-full md:max-w-md">
-              <SearchInput value={query} onChange={setQuery} placeholder="Pesquisar repetida..." />
-            </div>
-          </div>
-
-          {visibleDuplicateStickers.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {visibleDuplicateStickers.map((sticker) => (
-                <StickerCard
-                  key={sticker.id}
-                  sticker={sticker}
-                  teamName={getTeamName(sticker.teamId, teams)}
-                  groupName={getGroupName(sticker.groupId, groups)}
-                  onTogglePasted={handleTogglePasted}
-                  onIncrease={handleIncrease}
-                  onDecrease={handleDecrease}
-                  showDuplicateCount
-                />
+                </button>
               ))}
             </div>
           ) : (
-            <EmptyState title="Nenhuma repetida encontrada" description="Ajuste a busca ou adicione uma nova repetida." />
+            <EmptyState
+              title={query.trim() ? 'Nenhum jogador encontrado' : 'Nenhuma repetida cadastrada'}
+              description={query.trim() ? 'Tente buscar pelo nome do jogador, seleção ou código da figurinha.' : 'Pesquise um jogador para abrir o perfil e adicionar repetidas.'}
+            />
           )}
         </div>
-      ) : null}
-
-      {modalOpen ? (
-        <AddDuplicateModal
-          stickers={stickers}
-          teams={teams}
-          onClose={() => setModalOpen(false)}
-          onAddDuplicate={handleAddDuplicate}
-        />
-      ) : null}
+      )}
     </section>
   );
 }

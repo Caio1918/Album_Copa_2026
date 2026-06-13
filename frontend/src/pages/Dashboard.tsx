@@ -89,7 +89,7 @@ export function Dashboard() {
         description="Resumo geral do álbum, com progresso, figurinhas faltantes, repetidas e últimas atualizações."
       />
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
         <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-green-700">Álbum completo</p>
@@ -104,7 +104,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-5">
         <StatCard title="Coladas" value={`${stats.pasted} / ${stats.total}`} description="Figurinhas já marcadas no álbum." />
         <StatCard title="Faltam" value={stats.missing} description="Figurinhas que ainda não foram coladas." />
         <StatCard title="Repetidas" value={stats.duplicates} description="Calculado por quantidade - 1." />
@@ -116,7 +116,7 @@ export function Dashboard() {
         <div className="space-y-4">
           <SectionHeader title="Últimas figurinhas coladas" description="Atualizações mais recentes do álbum." />
           {latestPasted.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-3 md:gap-4">
               {latestPasted.map((sticker) => (
                 <StickerCard
                   key={sticker.id}
@@ -137,7 +137,7 @@ export function Dashboard() {
         <div className="space-y-4">
           <SectionHeader title="Últimas repetidas" description="Figurinhas com quantidade maior que 1." />
           {latestDuplicates.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-3 md:gap-4">
               {latestDuplicates.map((sticker) => (
                 <StickerCard
                   key={sticker.id}
